@@ -1,0 +1,33 @@
+before:
+  hooks:
+    - go mod download
+    - go generate ./...
+dist: binaries
+builds:
+  - goos:
+    - darwin
+    - linux
+    - windows
+    ldflags:
+    - -s -w -X "main.version={{.Env.VERSION}}"
+archives:
+  -
+    id: "es-gencert-cli"
+    builds: ['es-gencert-cli']
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}-{{.Arch}}"
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
