@@ -1,0 +1,16 @@
+version: '3.5'
+
+services:
+  cert-gen:
+    build: .
+    entrypoint: bash
+    command: >
+      -c "es-gencert-cli create-ca -out /tmp/ca &&
+         es-gencert-cli create-node -ca-certificate /tmp/ca/ca.crt -ca-key /tmp/ca/ca.key -out \
+         /tmp/node1 -ip-addresses 127.0.0.1,172.20.240.1 -dns-names eventstore-node1.localhost.com &&
+         es-gencert-cli create-node -ca-certificate /tmp/ca/ca.crt -ca-key /tmp/ca/ca.key -out \
+         /tmp/node2 -ip-addresses 127.0.0.1,172.20.240.2 -dns-names eventstore-node2.localhost.com &&
+         es-gencert-cli create-node -ca-certificate /tmp/ca/ca.crt -ca-key /tmp/ca/ca.key -out \
+         /tmp/node3 -ip-addresses 127.0.0.1,172.20.240.3 -dns-names eventstore-node3.localhost.com"
+    volumes:
+    - "${PWD}:/tmp"
