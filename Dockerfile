@@ -18,6 +18,16 @@ RUN apk add ca-certificates bash
 
 COPY --from=build_base /tmp/es-gencert/out/es-gencert-cli /app/es-gencert-cli
 
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --no-create-home \
+    --uid "1000" \
+    "eventstore" && \
+chown eventstore:eventstore /app \
+    --recursive
+
+USER eventstore
 ENV PATH=$PATH:/app
 ENTRYPOINT ["/app/es-gencert-cli"]
 CMD []
