@@ -40,7 +40,7 @@ You could also run the tool using Docker interactive container:
 docker run --rm -i eventstore/es-gencert-cli <command> <options>
 ```
 
-One useful scenarion is to use the tool inside the Docker Compose file to generate all the necessary certificates before starting cluster nodes. You can find an [example](https://github.com/EventStore/EventStore/blob/master/docker-compose.yml) in the EventStoreDB repository.
+One useful scenario is to use the tool inside the Docker Compose file to generate all the necessary certificates before starting cluster nodes. You can find an [example](https://github.com/EventStore/EventStore/blob/master/docker-compose.yml) in the EventStoreDB repository.
 
 ### Examples
 
