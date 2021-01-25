@@ -53,7 +53,7 @@ Generating a certificate authority:
 Generating a certificate for an EventStoreDB node:
 
 ```
-./es-gencert-cli-cli create-node -ca-certificate ./es-ca/ca.crt -ca-key ./es-ca/ca.key -out ./node1 -ip-addresses 127.0.0.1,172.20.240.1 -dns-names eventstore-node1.localhost.com
+./es-gencert-cli-cli create-node -ca-certificate ./es-ca/ca.crt -ca-key ./es-ca/ca.key -out ./node1 -ip-addresses 127.0.0.1,172.20.240.1 -dns-names localhost,eventstore-node1.localhost.com
 ```
 
 ## Development
