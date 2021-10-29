@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	multierror "github.com/hashicorp/go-multierror"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mitchellh/cli"
 )
 
@@ -25,8 +25,10 @@ type CreateCA struct {
 }
 
 type CreateCAArguments struct {
-	Days      int
-	OutputDir string
+	Days              int
+	OutputDir         string
+	CACertificatePath string
+	CAKeyPath         string
 }
 
 func (c *CreateCA) Run(args []string) int {
@@ -36,6 +38,8 @@ func (c *CreateCA) Run(args []string) int {
 	flags.Usage = func() { c.Ui.Info(c.Help()) }
 	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
 	flags.StringVar(&config.OutputDir, "out", "./ca", "The output directory")
+	flags.StringVar(&config.CACertificatePath, "ca-certificate", "", "the path to a CA certificate file")
+	flags.StringVar(&config.CAKeyPath, "ca-key", "", "the path to a CA key file")
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -44,6 +48,12 @@ func (c *CreateCA) Run(args []string) int {
 	validationErrors := new(multierror.Error)
 	if config.Days < 0 {
 		multierror.Append(validationErrors, errors.New("days must be positive"))
+	}
+
+	caCertPathLen := len(config.CACertificatePath)
+	caKeyPathLen := len(config.CAKeyPath)
+	if (caCertPathLen > 0 && caKeyPathLen == 0) || (caKeyPathLen > 0 && caCertPathLen == 0){
+		multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
@@ -59,9 +69,27 @@ func (c *CreateCA) Run(args []string) int {
 		days = config.Days
 		years = 0
 	}
+	
+	var caCert *x509.Certificate
+	var caKey *rsa.PrivateKey
+	var err error
+	if caCertPathLen > 0 {
+		caCert, err = readCertificateFromFile(config.CACertificatePath)
+		if err != nil {
+			c.Ui.Error(err.Error())
+			return 1
+		}
+
+		caKey, err = readRSAKeyFromFile(config.CAKeyPath)
+		if err != nil {
+			err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
+			c.Ui.Error(err.Error())
+			return 1
+		}
+	}
 
 	outputDir := config.OutputDir
-	err := generateCACertificate(defaultKeySize, years, days, outputDir)
+	err = generateCACertificate(years, days, outputDir, caCert, caKey)
 	if err != nil {
 		c.Ui.Error(err.Error())
 	} else {
@@ -70,7 +98,7 @@ func (c *CreateCA) Run(args []string) int {
 	return 0
 }
 
-func generateCACertificate(keysize int, years int, days int, outputDir string) error {
+func generateCACertificate(years int, days int, outputDir string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -81,9 +109,16 @@ func generateCACertificate(keysize int, years int, days int, outputDir string) e
 		return fmt.Errorf("could not generate RSA private key: %s", err.Error())
 	}
 
-	keyID := generateKeyIDFromRSAPublicKey(privateKey.N, privateKey.E)
-
 	cn := fmt.Sprintf("EventStoreDB CA %s", serialNumber.Text(16))
+	subjectKeyID := generateKeyIDFromRSAPublicKey(privateKey.N, privateKey.E)
+	authorityKeyID := subjectKeyID
+	maxPathLen := 2
+
+	if caCert != nil && caPrivateKey != nil {
+		maxPathLen = -1
+		cn = fmt.Sprintf("EventStoreDB Intermediate CA %s", serialNumber.Text(16))
+		authorityKeyID = generateKeyIDFromRSAPublicKey(caPrivateKey.N, caPrivateKey.E)
+	}
 
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -92,14 +127,22 @@ func generateCACertificate(keysize int, years int, days int, outputDir string) e
 			Organization: []string{"Event Store Ltd"},
 			Country:      []string{"UK"},
 		},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		MaxPathLen:            maxPathLen,
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(years, 0, days),
-		IsCA:                  true,
-		MaxPathLen:            1,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		SubjectKeyId:          keyID,
-		AuthorityKeyId:        keyID,
+		SubjectKeyId:          subjectKeyID,
+		AuthorityKeyId:        authorityKeyID,
+	}
+
+	parentCert := cert
+	certPrivateKey := privateKey
+
+	if caCert != nil && caPrivateKey != nil {
+		parentCert = caCert
+		certPrivateKey = caPrivateKey
 	}
 
 	privateKeyPem := new(bytes.Buffer)
@@ -111,7 +154,7 @@ func generateCACertificate(keysize int, years int, days int, outputDir string) e
 		return fmt.Errorf("could not encode private key to PEM format: %s", err.Error())
 	}
 
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &privateKey.PublicKey, privateKey)
+	certBytes, err := x509.CreateCertificate(rand.Reader, cert, parentCert, &privateKey.PublicKey, certPrivateKey)
 	if err != nil {
 		return fmt.Errorf("could not generate certificate: %s", err.Error())
 	}
@@ -153,14 +196,16 @@ func generateCACertificate(keysize int, years int, days int, outputDir string) e
 func (c *CreateCA) Help() string {
 	helpText := `
 Usage: create_ca [options]
-  Generate a root/CA TLS certificate to be used with EventStoreDB
+  Generate a root/intermediate CA TLS certificate to be used with EventStoreDB
 Options:
   -days                       The validity period of the certificate in days (default: 5 years)
   -out                        The output directory (default: ./ca)
+  -ca-certificate             The path to a CA certificate file for creating an intermediate CA certificate
+  -ca-key                     The path to a CA key file for creating an intermediate CA certificate
 `
 	return strings.TrimSpace(helpText)
 }
 
 func (c *CreateCA) Synopsis() string {
-	return "Generate a root/CA TLS certificate to be used with EventStoreDB"
+	return "Generate a root/intermediate CA TLS certificate to be used with EventStoreDB"
 }
