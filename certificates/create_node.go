@@ -190,7 +190,7 @@ func (c *CreateNode) Run(args []string) int {
 		years = 0
 	}
 
-	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, defaultKeySize, years, days, outputDir, outputBaseFileName)
+	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -200,7 +200,7 @@ func (c *CreateNode) Run(args []string) int {
 	return 0
 }
 
-func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, keysize int, years int, days int, outputDir string, outputBaseFileName string) error {
+func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
