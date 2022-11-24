@@ -11,22 +11,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - name: Set up Go
+      -
+        name: Checkout
+        uses: actions/checkout@v2.3.4
+      -
+        name: Unshallow
+        run: git fetch --prune --unshallow
+      -
+        name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.18
-      - name: Calculate Version
-        shell: bash
-        run: |
-          cd /tmp
-          go get github.com/mdomke/git-semver
-          cd -
-          version=$(~/go/bin/git-semver)
-          echo "VERSION=${version}" >> $GITHUB_ENV
       -
         name: Build and Publish
         uses: goreleaser/goreleaser-action@v3.0.0

@@ -8,8 +8,9 @@ builds:
   - darwin
   - linux
   - windows
+  mod_timestamp: '{{ .CommitTimestamp }}'
   ldflags:
-    - -s -w -X "main.version={{.Env.VERSION}}"
+    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
   goarch:
     - amd64
     - arm64
