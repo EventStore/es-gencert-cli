@@ -4,12 +4,15 @@ before:
     - go generate ./...
 dist: binaries
 builds:
-  - goos:
-    - darwin
-    - linux
-    - windows
-    ldflags:
+- goos:
+  - darwin
+  - linux
+  - windows
+  ldflags:
     - -s -w -X "main.version={{.Env.VERSION}}"
+  goarch:
+    - amd64
+    - arm64
 archives:
   -
     id: "es-gencert-cli"
