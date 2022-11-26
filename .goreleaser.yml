@@ -4,12 +4,16 @@ before:
     - go generate ./...
 dist: binaries
 builds:
-  - goos:
-    - darwin
-    - linux
-    - windows
-    ldflags:
-    - -s -w -X "main.version={{.Env.VERSION}}"
+- goos:
+  - darwin
+  - linux
+  - windows
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  ldflags:
+    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
+  goarch:
+    - amd64
+    - arm64
 archives:
   -
     id: "es-gencert-cli"
