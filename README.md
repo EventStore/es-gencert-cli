@@ -5,12 +5,14 @@ The command line interface to ease the generation of a certificate authority and
 ## Getting Started
 
 ### Releases
+
 The latest release for the es-gencert-cli can be found under the [GitHub releases page](https://github.com/EventStore/es-gencert-cli/releases).
 We releases binaries for Windows, Linux and macOS. We also publish the tool as a Docker image.
 
 ### Usage
 
 Basic usage for es-gencert-cli:
+
 ```
 ./es-gencert-cli [options] <command> [args]
 ```
@@ -32,6 +34,8 @@ Options:
   -out                        The output directory (default: ./ca)
 ```
 
+Note: the tool will create a new directory specified by the `-out` flag. If the directory already exists, the tool will fail.
+
 ## Running with Docker
 
 You could also run the tool using Docker interactive container:
@@ -39,6 +43,14 @@ You could also run the tool using Docker interactive container:
 ```bash
 docker run --rm -i eventstore/es-gencert-cli <command> <options>
 ```
+
+You need to map the output directory to a local directory, for example:
+
+```bash
+docker run --rm -i -v ${PWD}:/certs \
+  eventstore/es-gencert-cli \
+  create-ca -out /certs/certs
+````
 
 One useful scenario is to use the tool inside the Docker Compose file to generate all the necessary certificates before starting cluster nodes. You can find an [example](https://github.com/EventStore/EventStore/blob/master/docker-compose.yml) in the EventStoreDB repository.
 
