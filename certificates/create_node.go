@@ -33,6 +33,7 @@ type CreateNodeArguments struct {
 	DNSNames          string
 	Days              int
 	OutputDir         string
+	CommonName        string
 }
 
 func readCertificateFromFile(path string) (*x509.Certificate, error) {
@@ -112,6 +113,7 @@ func (c *CreateNode) Run(args []string) int {
 	flags := flag.NewFlagSet("create_node", flag.ContinueOnError)
 	flags.Usage = func() { c.Ui.Info(c.Help()) }
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "./ca/ca.crt", "the path to the CA certificate file")
+	flags.StringVar(&config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
 	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
 	flags.StringVar(&config.IPAddresses, "ip-addresses", "", "comma-separated list of IP addresses of the node")
 	flags.StringVar(&config.DNSNames, "dns-names", "", "comma-separated list of DNS names of the node")
@@ -190,7 +192,7 @@ func (c *CreateNode) Run(args []string) int {
 		years = 0
 	}
 
-	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName)
+	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName, config.CommonName)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -200,7 +202,7 @@ func (c *CreateNode) Run(args []string) int {
 	return 0
 }
 
-func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string) error {
+func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string, commonName string) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -217,7 +219,7 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			CommonName: "eventstoredb-node",
+			CommonName: commonName,
 		},
 		IsCA:                  false,
 		BasicConstraintsValid: true,
