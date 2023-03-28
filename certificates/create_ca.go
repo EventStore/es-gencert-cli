@@ -25,10 +25,10 @@ type CreateCA struct {
 }
 
 type CreateCAArguments struct {
-	Days              int
-	OutputDir         string
-	CACertificatePath string
-	CAKeyPath         string
+	Days              int    `yaml:"days"`
+	OutputDir         string `yaml:"out"`
+	CACertificatePath string `yaml:"ca-certificate"`
+	CAKeyPath         string `yaml:"ca-key"`
 }
 
 func (c *CreateCA) Run(args []string) int {
@@ -52,7 +52,7 @@ func (c *CreateCA) Run(args []string) int {
 
 	caCertPathLen := len(config.CACertificatePath)
 	caKeyPathLen := len(config.CAKeyPath)
-	if (caCertPathLen > 0 && caKeyPathLen == 0) || (caKeyPathLen > 0 && caCertPathLen == 0){
+	if (caCertPathLen > 0 && caKeyPathLen == 0) || (caKeyPathLen > 0 && caCertPathLen == 0) {
 		multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
 	}
 
@@ -69,7 +69,7 @@ func (c *CreateCA) Run(args []string) int {
 		days = config.Days
 		years = 0
 	}
-	
+
 	var caCert *x509.Certificate
 	var caKey *rsa.PrivateKey
 	var err error

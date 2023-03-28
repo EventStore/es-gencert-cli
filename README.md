@@ -56,6 +56,38 @@ Generating a certificate for an EventStoreDB node:
 ./es-gencert-cli create-node -ca-certificate ./es-ca/ca.crt -ca-key ./es-ca/ca.key -out ./node1 -ip-addresses 127.0.0.1,172.20.240.1 -dns-names localhost,eventstore-node1.localhost.com
 ```
 
+Generating certificates using config file:
+```
+./es-gencert-cli create-certs --config-file ./certs.yml
+```
+
+An example config file:
+```yaml
+certificates:
+  ca-certs:
+    - out: "./root_ca"
+    - out: "./intermediate_ca"
+      cert-path: "./root_ca/ca.crt"
+      key-path: "./root_ca/ca.key"
+      days: 5
+  node-certs:
+    - out: "./node1"
+      ca-certificate: "./intermediate_ca/ca.crt"
+      ca-key: "./intermediate_ca/ca.key"
+      ip-addresses: "127.0.0.1,172.20.240.1"
+      dns-names: "localhost,eventstore-node1.localhost.com"
+    - out: "./node2"
+      ca-certificate: "./intermediate_ca/ca.crt"
+      ca-key: "./intermediate_ca/ca.key"
+      ip-addresses: "127.0.0.2,172.20.240.2"
+      dns-names: "localhost,eventstore-node2.localhost.com"
+    - out: "./node3"
+      ca-certificate: "./intermediate_ca/ca.crt"
+      ca-key: "./intermediate_ca/ca.key"
+      ip-addresses: "127.0.0.3,172.20.240.3"
+      dns-names: "localhost,eventstore-node2.localhost.com"
+```
+
 ## Development
 
 Building or working on `es-gencert-cli` requires a Go environment, version 1.14 or higher.
