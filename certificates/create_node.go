@@ -292,6 +292,7 @@ Options:
   -out                        The output directory (default: ./nodeX where X is an auto-generated number)
   -ip-addresses               Comma-separated list of IP addresses of the node
   -dns-names                  Comma-separated list of DNS names of the node
+  -common-name                The certificate subject common name
 
   At least one IP address or DNS name needs to be specified
 `
