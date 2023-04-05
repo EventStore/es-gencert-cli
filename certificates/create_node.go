@@ -27,13 +27,13 @@ type CreateNode struct {
 }
 
 type CreateNodeArguments struct {
-	CACertificatePath string
-	CAKeyPath         string
-	IPAddresses       string
-	DNSNames          string
-	Days              int
-	OutputDir         string
-	CommonName        string
+	CACertificatePath string `yaml:"ca-certificate"`
+	CAKeyPath         string `yaml:"ca-key"`
+	IPAddresses       string `yaml:"ip-addresses"`
+	DNSNames          string `yaml:"dns-names"`
+	Days              int    `yaml:"days"`
+	OutputDir         string `yaml:"out"`
+	CommonName        string `yaml:"common-name"`
 }
 
 func readCertificateFromFile(path string) (*x509.Certificate, error) {

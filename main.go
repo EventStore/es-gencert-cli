@@ -53,6 +53,14 @@ func main() {
 				},
 			}, nil
 		},
+		"create-certs": func() (cli.Command, error) {
+			return &certificates.CreateCertificates{
+				Ui: &cli.ColoredUi{
+					Ui:          ui,
+					OutputColor: cli.UiColorBlue,
+				},
+			}, nil
+		},
 	}
 	c.HelpFunc = createGeneralHelpFunc(appName, flags)
 
