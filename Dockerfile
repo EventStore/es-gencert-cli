@@ -24,10 +24,11 @@ RUN adduser \
     --no-create-home \
     --uid "1000" \
     "eventstore" && \
-chown eventstore:eventstore /app \
+    chown eventstore:eventstore /app \
     --recursive
 
 USER eventstore
 ENV PATH=$PATH:/app
+WORKDIR /tmp
 ENTRYPOINT ["/app/es-gencert-cli"]
 CMD []
