@@ -1,4 +1,4 @@
-FROM golang:1.14-alpine AS build_base
+FROM golang:1.21-alpine AS build_base
 
 RUN apk add --no-cache git
 
@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o ./out/es-gencert-cli .
+RUN GOEXPERIMENT=boringcrypto go build -o ./out/es-gencert-cli .
 
 FROM alpine:3.9
 RUN apk add ca-certificates bash

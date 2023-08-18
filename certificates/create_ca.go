@@ -10,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -93,7 +92,11 @@ func (c *CreateCA) Run(args []string) int {
 	if err != nil {
 		c.Ui.Error(err.Error())
 	} else {
-		c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory", outputDir))
+		if isBoringEnabled() {
+			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
+		} else {
+			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory.", outputDir))
+		}
 	}
 	return 0
 }
@@ -146,7 +149,7 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 	}
 
 	privateKeyPem := new(bytes.Buffer)
-	pem.Encode(privateKeyPem, &pem.Block{
+	err = pem.Encode(privateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
@@ -179,13 +182,13 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 	}
 
 	certFile := "ca.crt"
-	err = ioutil.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
+	err = os.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
 	if err != nil {
 		return fmt.Errorf("error writing CA certificate to %s: %s", certFile, err.Error())
 	}
 
 	keyFile := "ca.key"
-	err = ioutil.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
+	err = os.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
 	if err != nil {
 		return fmt.Errorf("error writing CA's private key to %s: %s", keyFile, err.Error())
 	}
