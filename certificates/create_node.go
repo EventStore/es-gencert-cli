@@ -10,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path"
@@ -37,7 +36,7 @@ type CreateNodeArguments struct {
 }
 
 func readCertificateFromFile(path string) (*x509.Certificate, error) {
-	pemBytes, err := ioutil.ReadFile(path)
+	pemBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %s", err.Error())
 	}
@@ -55,7 +54,7 @@ func readCertificateFromFile(path string) (*x509.Certificate, error) {
 }
 
 func readRSAKeyFromFile(path string) (*rsa.PrivateKey, error) {
-	keyBytes, err := ioutil.ReadFile(path)
+	keyBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %s", err.Error())
 	}
@@ -198,7 +197,12 @@ func (c *CreateNode) Run(args []string) int {
 		return 1
 	}
 
-	c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory.", outputDir))
+	if isBoringEnabled() {
+		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
+	} else {
+		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory.", outputDir))
+	}
+
 	return 0
 }
 
@@ -267,13 +271,13 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	}
 
 	certFile := fmt.Sprintf("%s.crt", outputBaseFileName)
-	err = ioutil.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
+	err = os.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
 	if err != nil {
 		return fmt.Errorf("error writing certificate to %s: %s", certFile, err.Error())
 	}
 
 	keyFile := fmt.Sprintf("%s.key", outputBaseFileName)
-	err = ioutil.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
+	err = os.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
 	if err != nil {
 		return fmt.Errorf("error writing private key to %s: %s", keyFile, err.Error())
 	}

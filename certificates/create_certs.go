@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/mitchellh/cli"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 )
@@ -33,7 +33,7 @@ func (c *CreateCertificates) Run(args []string) int {
 	if err := flags.Parse(args); err != nil {
 		return 1
 	}
-	configData, err := ioutil.ReadFile(arguments.ConfigPath)
+	configData, err := os.ReadFile(arguments.ConfigPath)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
