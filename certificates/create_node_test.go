@@ -10,60 +10,101 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	Years            = 1
+	Days             = 0
+	OutputDirCA      = "./ca"
+	OutputDirNode    = "./node"
+	NodeCertFileName = "node"
+	IPAddresses      = "127.0.0.1"
+	CommonName       = "EventStoreDB"
+)
+
+var DnsNames = []string{"localhost"}
+
+func cleanup() {
+	os.RemoveAll(OutputDirCA)
+	os.RemoveAll(OutputDirNode)
+}
+
+func assertFilesExist(t *testing.T, files ...string) {
+	for _, file := range files {
+		_, err := os.Stat(file)
+		assert.False(t, os.IsNotExist(err))
+	}
+}
+
+func generateAndAssertCACert(t *testing.T, forceFlag bool) (*x509.Certificate, *rsa.PrivateKey) {
+	certificateError := generateCACertificate(Years, Days, OutputDirCA, nil, nil, forceFlag)
+	assert.NoError(t, certificateError)
+
+	certFilePath := path.Join(OutputDirCA, "ca.crt")
+	keyFilePath := path.Join(OutputDirCA, "ca.key")
+	assertFilesExist(t, certFilePath, keyFilePath)
+
+	caCertificate, err := readCertificateFromFile(certFilePath)
+	assert.NoError(t, err)
+	caPrivateKey, err := readRSAKeyFromFile(keyFilePath)
+	assert.NoError(t, err)
+
+	return caCertificate, caPrivateKey
+}
+
 func TestGenerateNodeCertificate(t *testing.T) {
 
 	t.Run("nominal-case", func(t *testing.T) {
+		cleanup()
 
-		years := 1
-		days := 0
-		outputDirCA := "./ca"
-		outputDirNode := "./node"
-		var caCert *x509.Certificate
-		var caKey *rsa.PrivateKey
-		var nodeCertFileName = "node"
-		var ipAddresses = "127.0.0.1"
-		var dnsNames = []string{"localhost"}
-		var commonName = "EventStoreDB"
+		caCertificate, caPrivateKey := generateAndAssertCACert(t, false)
+		ips, err := parseIPAddresses(IPAddresses)
+		assert.NoError(t, err)
 
-		// Clean up from previous runs
-		os.RemoveAll(outputDirCA)
-		os.RemoveAll(outputDirNode)
-
-		certificateError := generateCACertificate(years, days, outputDirCA, caCert, caKey)
-
-		certFilePath := path.Join(outputDirCA, "ca.crt")
-		keyFilePath := path.Join(outputDirCA, "ca.key")
-
-		_, certPathError := os.Stat(certFilePath)
-		_, keyPathError := os.Stat(keyFilePath)
-
+		certificateError := generateNodeCertificate(caCertificate, caPrivateKey, ips, DnsNames, Years, Days, OutputDirNode, NodeCertFileName, CommonName, false)
 		assert.NoError(t, certificateError)
-		assert.False(t, os.IsNotExist(certPathError))
-		assert.False(t, os.IsNotExist(keyPathError))
 
-		caCertificate, err := readCertificateFromFile(certFilePath)
+		nodeCertPath := path.Join(OutputDirNode, NodeCertFileName+".crt")
+		nodeKeyPath := path.Join(OutputDirNode, NodeCertFileName+".key")
+		assertFilesExist(t, nodeCertPath, nodeKeyPath)
+
+		cleanup()
+	})
+
+	t.Run("force-flag", func(t *testing.T) {
+		cleanup()
+
+		caCertificate, caPrivateKey := generateAndAssertCACert(t, false)
+		ips, err := parseIPAddresses(IPAddresses)
 		assert.NoError(t, err)
-		caPrivateKey, err := readRSAKeyFromFile(keyFilePath)
+
+		nodeCertFilePath := path.Join(OutputDirNode, NodeCertFileName+".crt")
+		nodeKeyFilePath := path.Join(OutputDirNode, NodeCertFileName+".key")
+
+		generateNodeCertificate(caCertificate, caPrivateKey, ips, DnsNames, Years, Days, OutputDirNode, NodeCertFileName, CommonName, false)
+		nodeCertFile, err := readCertificateFromFile(nodeCertFilePath)
+		assert.NoError(t, err)
+		nodeKeyFile, err := readRSAKeyFromFile(nodeKeyFilePath)
 		assert.NoError(t, err)
 
-		ips, err := parseIPAddresses(ipAddresses)
+		// try to generate again without force
+		err = generateNodeCertificate(caCertificate, caPrivateKey, ips, DnsNames, Years, Days, OutputDirNode, NodeCertFileName, CommonName, false)
+		assert.Error(t, err)
+		nodeCertFileAfter, err := readCertificateFromFile(nodeCertFilePath)
 		assert.NoError(t, err)
+		nodeKeyFileAfter, err := readRSAKeyFromFile(nodeKeyFilePath)
+		assert.NoError(t, err)
+		assert.Equal(t, nodeCertFile, nodeCertFileAfter, "Expected node certificate to be the same")
+		assert.Equal(t, nodeKeyFile, nodeKeyFileAfter, "Expected node key to be the same")
 
-		certificateError = generateNodeCertificate(caCertificate, caPrivateKey, ips, dnsNames, years, days, outputDirNode, nodeCertFileName, commonName)
+		// try to generate again with force
+		err = generateNodeCertificate(caCertificate, caPrivateKey, ips, DnsNames, Years, Days, OutputDirNode, NodeCertFileName, CommonName, true)
+		assert.NoError(t, err)
+		nodeCertFileAfterWithForce, err := readCertificateFromFile(nodeCertFilePath)
+		assert.NoError(t, err)
+		nodeKeyFileAfterWithForce, err := readRSAKeyFromFile(nodeKeyFilePath)
+		assert.NoError(t, err)
+		assert.NotEqual(t, nodeCertFileAfter, nodeCertFileAfterWithForce, "Expected node certificate to be different")
+		assert.NotEqual(t, nodeKeyFileAfter, nodeKeyFileAfterWithForce, "Expected node key key to be different")
 
-		nodeCertPath := path.Join(outputDirNode, "node.crt")
-		nodeKeyPath := path.Join(outputDirNode, "node.key")
-
-		_, nodeCertPathError := os.Stat(nodeCertPath)
-		_, nodeKeyPathError := os.Stat(nodeKeyPath)
-
-		assert.NoError(t, certificateError)
-		assert.False(t, os.IsNotExist(nodeCertPathError))
-		assert.False(t, os.IsNotExist(nodeKeyPathError))
-
-		// Clean up
-		os.RemoveAll(outputDirCA)
-		os.RemoveAll(outputDirNode)
-
+		cleanup()
 	})
 }

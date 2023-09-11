@@ -26,3 +26,6 @@ _testmain.go
 .idea/
 binaries/
 ca/
+
+es-gencert-cli
+certs.yml
