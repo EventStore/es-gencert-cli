@@ -1,5 +1,9 @@
 name: Build
 
+permissions:
+  contents: write
+  packages: write
+
 on:
   pull_request:
   push:
@@ -55,7 +59,7 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: |
-            eventstore/es-gencert-cli/es-gencert-cli
+            ghcr.io/eventstore/es-gencert-cli
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -82,6 +86,6 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ghcr.io/${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
