@@ -11,7 +11,6 @@ import (
 )
 
 func TestGenerateCACertificate(t *testing.T) {
-
 	t.Run("nominal-case", func(t *testing.T) {
 		years := 1
 		days := 0
@@ -36,7 +35,5 @@ func TestGenerateCACertificate(t *testing.T) {
 
 		// Clean up
 		os.RemoveAll(outputDir)
-
 	})
-
 }

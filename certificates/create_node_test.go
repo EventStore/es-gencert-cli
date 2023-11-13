@@ -11,9 +11,7 @@ import (
 )
 
 func TestGenerateNodeCertificate(t *testing.T) {
-
 	t.Run("nominal-case", func(t *testing.T) {
-
 		years := 1
 		days := 0
 		outputDirCA := "./ca"
@@ -64,6 +62,5 @@ func TestGenerateNodeCertificate(t *testing.T) {
 		// Clean up
 		os.RemoveAll(outputDirCA)
 		os.RemoveAll(outputDirNode)
-
 	})
 }

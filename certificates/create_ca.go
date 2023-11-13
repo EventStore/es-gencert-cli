@@ -20,7 +20,7 @@ import (
 )
 
 type CreateCA struct {
-	Ui cli.Ui
+	UI cli.Ui
 }
 
 type CreateCAArguments struct {
@@ -34,7 +34,7 @@ func (c *CreateCA) Run(args []string) int {
 	var config CreateCAArguments
 
 	flags := flag.NewFlagSet("create_ca", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
+	flags.Usage = func() { c.UI.Info(c.Help()) }
 	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
 	flags.StringVar(&config.OutputDir, "out", "./ca", "The output directory")
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "", "the path to a CA certificate file")
@@ -46,17 +46,25 @@ func (c *CreateCA) Run(args []string) int {
 
 	validationErrors := new(multierror.Error)
 	if config.Days < 0 {
-		multierror.Append(validationErrors, errors.New("days must be positive"))
+		err := multierror.Append(validationErrors, errors.New("days must be positive"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	caCertPathLen := len(config.CACertificatePath)
 	caKeyPathLen := len(config.CAKeyPath)
 	if (caCertPathLen > 0 && caKeyPathLen == 0) || (caKeyPathLen > 0 && caCertPathLen == 0) {
-		multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
+		err := multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
-		c.Ui.Error(validationErrors.Error())
+		c.UI.Error(validationErrors.Error())
 		return 1
 	}
 
@@ -75,14 +83,14 @@ func (c *CreateCA) Run(args []string) int {
 	if caCertPathLen > 0 {
 		caCert, err = readCertificateFromFile(config.CACertificatePath)
 		if err != nil {
-			c.Ui.Error(err.Error())
+			c.UI.Error(err.Error())
 			return 1
 		}
 
 		caKey, err = readRSAKeyFromFile(config.CAKeyPath)
 		if err != nil {
-			err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
-			c.Ui.Error(err.Error())
+			err = fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
+			c.UI.Error(err.Error())
 			return 1
 		}
 	}
@@ -90,12 +98,12 @@ func (c *CreateCA) Run(args []string) int {
 	outputDir := config.OutputDir
 	err = generateCACertificate(years, days, outputDir, caCert, caKey)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 	} else {
 		if isBoringEnabled() {
-			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
+			c.UI.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
 		} else {
-			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory.", outputDir))
+			c.UI.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory.", outputDir))
 		}
 	}
 	return 0
@@ -194,8 +202,8 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 	}
 
 	return nil
-
 }
+
 func (c *CreateCA) Help() string {
 	helpText := `
 Usage: create_ca [options]

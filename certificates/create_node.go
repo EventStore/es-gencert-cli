@@ -22,7 +22,7 @@ import (
 )
 
 type CreateNode struct {
-	Ui cli.Ui
+	UI cli.Ui
 }
 
 type CreateNodeArguments struct {
@@ -110,7 +110,7 @@ func (c *CreateNode) Run(args []string) int {
 	var config CreateNodeArguments
 
 	flags := flag.NewFlagSet("create_node", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
+	flags.Usage = func() { c.UI.Info(c.Help()) }
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "./ca/ca.crt", "the path to the CA certificate file")
 	flags.StringVar(&config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
 	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
@@ -125,48 +125,64 @@ func (c *CreateNode) Run(args []string) int {
 
 	validationErrors := new(multierror.Error)
 	if len(config.CACertificatePath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
+		err := multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	if len(config.CAKeyPath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-key is a required field"))
+		err := multierror.Append(validationErrors, errors.New("ca-key is a required field"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	if len(config.IPAddresses) == 0 && len(config.DNSNames) == 0 {
-		multierror.Append(validationErrors, errors.New("at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names"))
+		err := multierror.Append(validationErrors, errors.New("at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	if config.Days < 0 {
-		multierror.Append(validationErrors, errors.New("days must be positive"))
+		err := multierror.Append(validationErrors, errors.New("days must be positive"))
+		if err != nil {
+			c.UI.Error(err.Error())
+			return 1
+		}
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
-		c.Ui.Error(validationErrors.Error())
+		c.UI.Error(validationErrors.Error())
 		return 1
 	}
 
 	caCert, err := readCertificateFromFile(config.CACertificatePath)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
 	caKey, err := readRSAKeyFromFile(config.CAKeyPath)
 	if err != nil {
-		err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
-		c.Ui.Error(err.Error())
+		err = fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
 	ips, err := parseIPAddresses(config.IPAddresses)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
 	dnsNames, err := parseDNSNames(config.DNSNames)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
@@ -176,7 +192,7 @@ func (c *CreateNode) Run(args []string) int {
 	if len(outputDir) == 0 {
 		outputDir, err = getOutputDirectory()
 		if err != nil {
-			c.Ui.Error(err.Error())
+			c.UI.Error(err.Error())
 			return 1
 		}
 		outputBaseFileName = outputDir
@@ -193,20 +209,31 @@ func (c *CreateNode) Run(args []string) int {
 
 	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName, config.CommonName)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
 	if isBoringEnabled() {
-		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
+		c.UI.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
 	} else {
-		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory.", outputDir))
+		c.UI.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory.", outputDir))
 	}
 
 	return 0
 }
 
-func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string, commonName string) error {
+func generateNodeCertificate(
+	caCert *x509.Certificate,
+	caPrivateKey *rsa.PrivateKey,
+	ips []net.IP,
+	dnsNames []string,
+	years int,
+	days int,
+	outputDir string,
+	outputBaseFileName string,
+	commonName string,
+) error {
+
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -238,7 +265,7 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	}
 
 	privateKeyPem := new(bytes.Buffer)
-	pem.Encode(privateKeyPem, &pem.Block{
+	err = pem.Encode(privateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
@@ -283,8 +310,8 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	}
 
 	return nil
-
 }
+
 func (c *CreateNode) Help() string {
 	helpText := `
 Usage: create_node [options]

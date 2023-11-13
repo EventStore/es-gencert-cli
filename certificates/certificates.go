@@ -9,7 +9,7 @@ import (
 )
 
 type Certificates struct {
-	Ui cli.Ui
+	UI cli.Ui
 }
 
 func (command *Certificates) Run(args []string) int {
@@ -23,7 +23,7 @@ func (command *Certificates) Run(args []string) int {
 	c.Commands = map[string]cli.CommandFactory{
 		"create-ca": func() (cli.Command, error) {
 			return &CreateCA{
-				Ui: &cli.ColoredUi{
+				UI: &cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
@@ -31,7 +31,7 @@ func (command *Certificates) Run(args []string) int {
 		},
 		"create-node": func() (cli.Command, error) {
 			return &CreateNode{
-				Ui: &cli.ColoredUi{
+				UI: &cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
@@ -45,16 +45,16 @@ func (command *Certificates) Run(args []string) int {
 	return exitStatus
 }
 
-func (c *Certificates) Help() string {
+func (command *Certificates) Help() string {
 	helpText := `
 usage: certificates [--help] <command> [<args>]
 
 Available commands:
 `
-	helpText += c.Synopsis()
+	helpText += command.Synopsis()
 	return strings.TrimSpace(helpText)
 }
 
-func (c *Certificates) Synopsis() string {
+func (command *Certificates) Synopsis() string {
 	return "certificates (create_ca, create_node)"
 }

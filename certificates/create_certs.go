@@ -3,15 +3,16 @@ package certificates
 import (
 	"flag"
 	"fmt"
-	"github.com/mitchellh/cli"
-	"gopkg.in/yaml.v3"
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/mitchellh/cli"
+	"gopkg.in/yaml.v3"
 )
 
 type CreateCertificates struct {
-	Ui cli.Ui
+	UI cli.Ui
 }
 
 type CreateCertificateArguments struct {
@@ -28,20 +29,20 @@ type Config struct {
 func (c *CreateCertificates) Run(args []string) int {
 	var arguments CreateCertificateArguments
 	flags := flag.NewFlagSet("create_certs", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
+	flags.Usage = func() { c.UI.Info(c.Help()) }
 	flags.StringVar(&arguments.ConfigPath, "config-file", "./certs.yml", "The config yml file")
 	if err := flags.Parse(args); err != nil {
 		return 1
 	}
 	configData, err := os.ReadFile(arguments.ConfigPath)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 	config := Config{}
 
 	if yaml.Unmarshal(configData, &config) != nil {
-		c.Ui.Error(err.Error())
+		c.UI.Error(err.Error())
 		return 1
 	}
 
@@ -50,14 +51,13 @@ func (c *CreateCertificates) Run(args []string) int {
 	}
 
 	return 0
-
 }
 
 func (c *CreateCertificates) generateNodes(config Config) int {
 	for _, node := range config.Certificates.Nodes {
 		createNode := CreateNode{
-			Ui: &cli.ColoredUi{
-				Ui:          c.Ui,
+			UI: &cli.ColoredUi{
+				Ui:          c.UI,
 				OutputColor: cli.UiColorBlue,
 			},
 		}
@@ -71,8 +71,8 @@ func (c *CreateCertificates) generateNodes(config Config) int {
 func (c *CreateCertificates) generateCaCerts(config Config) int {
 	for _, ca := range config.Certificates.CaCerts {
 		createCa := CreateCA{
-			Ui: &cli.ColoredUi{
-				Ui:          c.Ui,
+			UI: &cli.ColoredUi{
+				Ui:          c.UI,
 				OutputColor: cli.UiColorBlue,
 			},
 		}

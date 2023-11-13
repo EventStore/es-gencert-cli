@@ -1,0 +1,50 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  fast: false
+  enable:
+    - dogsled
+    - durationcheck
+    - errcheck
+    - exportloopref
+    - govet
+    - gosimple
+    - gofmt
+    - goconst
+    - goimports
+    - gomnd
+    - gocyclo
+    - ineffassign
+    - lll
+    - prealloc
+    - revive
+    - staticcheck
+    - typecheck
+    - unused
+    - whitespace
+    - wastedassign
+    - unconvert
+
+linters-settings:
+  govet:
+    check-shadowing: true
+  whitespace:
+    multi-func: true
+  lll:
+    line-length: 160
+  gomnd:
+    # don't include the "operation", "argument" and "assign"
+    checks: 
+      - case
+      - condition
+      - return
+  goconst:
+    ignore-tests: true
+  gocyclo:
+    # recommend 10-20
+    min-complexity: 50
+  goimports:
+    local-prefixes: github.com/go-kratos # Put imports beginning with prefix after 3rd-party packages

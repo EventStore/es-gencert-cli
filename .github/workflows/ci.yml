@@ -10,31 +10,37 @@ on:
     branches:
       - master
     tags:
-      - "*"
+      - '*'
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v3
-      -
-        name: Unshallow
+      - name: Unshallow
         run: git fetch --prune --unshallow
-      -
-        name: Set up Go
+      - name: Set up Go
         uses: actions/setup-go@v3
         with:
           go-version: 1.21
-        env: 
+        env:
           GOEXPERIMENT: boringcrypto
-      -
-        name: Run Tests
-        env: 
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --config .golangci.yml
+        env:
+          GOEXPERIMENT: boringcrypto
+      - name: Run Static Analysis
+        run: golangci-lint run
+        env:
+          GOEXPERIMENT: boringcrypto
+      - name: Run Tests
+        env:
           GOEXPERIMENT: boringcrypto
         run: go test ./...
-      -
-        name: Build and Publish
+      - name: Build and Publish
         uses: goreleaser/goreleaser-action@v3
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         with:
@@ -43,8 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOEXPERIMENT: boringcrypto
-      -
-        name: Build and Publish (Dry Run)
+      - name: Build and Publish (Dry Run)
         uses: goreleaser/goreleaser-action@v3
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
@@ -53,8 +58,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOEXPERIMENT: boringcrypto
-      -
-        name: Docker meta
+      - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
         with:
@@ -67,22 +71,18 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
-      -
-        name: Set up QEMU
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      -
-        name: Login to DockerHub
+      - name: Login to DockerHub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Push to GitHub Packages
+      - name: Push to GitHub Packages
         uses: docker/build-push-action@v3
         with:
           push: ${{ github.event_name != 'pull_request' }}

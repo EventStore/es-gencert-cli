@@ -29,7 +29,11 @@ func main() {
 	flags := flag.NewFlagSet("config", flag.ContinueOnError)
 
 	if !c.IsVersion() && !c.IsHelp() {
-		flags.Parse(os.Args[1:])
+		err := flags.Parse(os.Args[1:])
+		if err != nil {
+			log.Println(err)
+			os.Exit(1)
+		}
 		args = flags.Args()
 	}
 
@@ -39,7 +43,7 @@ func main() {
 	c.Commands = map[string]cli.CommandFactory{
 		"create-ca": func() (cli.Command, error) {
 			return &certificates.CreateCA{
-				Ui: &cli.ColoredUi{
+				UI: &cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
@@ -47,7 +51,7 @@ func main() {
 		},
 		"create-node": func() (cli.Command, error) {
 			return &certificates.CreateNode{
-				Ui: &cli.ColoredUi{
+				UI: &cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
@@ -55,7 +59,7 @@ func main() {
 		},
 		"create-certs": func() (cli.Command, error) {
 			return &certificates.CreateCertificates{
-				Ui: &cli.ColoredUi{
+				UI: &cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
