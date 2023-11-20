@@ -10,9 +10,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"path"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -28,6 +28,7 @@ type CreateCAArguments struct {
 	OutputDir         string `yaml:"out"`
 	CACertificatePath string `yaml:"ca-certificate"`
 	CAKeyPath         string `yaml:"ca-key"`
+	Force             bool   `yaml:"force"`
 }
 
 func (c *CreateCA) Run(args []string) int {
@@ -39,6 +40,7 @@ func (c *CreateCA) Run(args []string) int {
 	flags.StringVar(&config.OutputDir, "out", "./ca", "The output directory")
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "", "the path to a CA certificate file")
 	flags.StringVar(&config.CAKeyPath, "ca-key", "", "the path to a CA key file")
+	flags.BoolVar(&config.Force, "force", false, "Force overwrite of existing files without prompting")
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -57,6 +59,17 @@ func (c *CreateCA) Run(args []string) int {
 
 	if validationErrors.ErrorOrNil() != nil {
 		c.Ui.Error(validationErrors.Error())
+		return 1
+	}
+
+	// check if certificates already exist
+	if fileExists(path.Join(config.OutputDir, "ca.key"), config.Force) {
+		c.Ui.Error(ErrFileExists)
+		return 1
+	}
+
+	if fileExists(path.Join(config.OutputDir, "ca.crt"), config.Force) {
+		c.Ui.Error(ErrFileExists)
 		return 1
 	}
 
@@ -88,7 +101,7 @@ func (c *CreateCA) Run(args []string) int {
 	}
 
 	outputDir := config.OutputDir
-	err = generateCACertificate(years, days, outputDir, caCert, caKey)
+	err = generateCACertificate(years, days, outputDir, caCert, caKey, config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
 	} else {
@@ -101,7 +114,7 @@ func (c *CreateCA) Run(args []string) int {
 	return 0
 }
 
-func generateCACertificate(years int, days int, outputDir string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey) error {
+func generateCACertificate(years int, days int, outputDir string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, force bool) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -171,42 +184,29 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 		return fmt.Errorf("could not encode certificate to PEM format: %s", err.Error())
 	}
 
-	err = os.Mkdir(outputDir, 0755)
-	if err != nil {
-		if !os.IsExist(err) {
-			return fmt.Errorf("could not create directory %s: %s", outputDir, err.Error())
-		}
-		if os.IsExist(err) {
-			return fmt.Errorf("output directory: %s already exists. please delete it and try again", outputDir)
-		}
-	}
+	err = writeCACertAndKey(outputDir, "ca", certPem, privateKeyPem, force)
 
-	certFile := "ca.crt"
-	err = os.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
-	if err != nil {
-		return fmt.Errorf("error writing CA certificate to %s: %s", certFile, err.Error())
-	}
-
-	keyFile := "ca.key"
-	err = os.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
-	if err != nil {
-		return fmt.Errorf("error writing CA's private key to %s: %s", keyFile, err.Error())
-	}
-
-	return nil
-
+	return err
 }
+
 func (c *CreateCA) Help() string {
-	helpText := `
-Usage: create_ca [options]
-  Generate a root/intermediate CA TLS certificate to be used with EventStoreDB
-Options:
-  -days                       The validity period of the certificate in days (default: 5 years)
-  -out                        The output directory (default: ./ca)
-  -ca-certificate             The path to a CA certificate file for creating an intermediate CA certificate
-  -ca-key                     The path to a CA key file for creating an intermediate CA certificate
-`
-	return strings.TrimSpace(helpText)
+	var buffer bytes.Buffer
+
+	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
+
+	fmt.Fprintln(w, "Usage: create_ca [options]")
+	fmt.Fprintln(w, "Generate a root/intermediate CA TLS certificate to be used with EventStoreDB.")
+	fmt.Fprintln(w, "Options:")
+
+	writeHelpOption(w, "days", "The validity period of the certificate in days (default: 5 years).")
+	writeHelpOption(w, "out", "The output directory (default: ./ca).")
+	writeHelpOption(w, "ca-certificate", "The path to a CA certificate file for creating an intermediate CA certificate.")
+	writeHelpOption(w, "ca-key", "The path to a CA key file for creating an intermediate CA certificate.")
+	writeHelpOption(w, "force", forceOption)
+
+	w.Flush()
+
+	return strings.TrimSpace(buffer.String())
 }
 
 func (c *CreateCA) Synopsis() string {

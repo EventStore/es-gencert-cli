@@ -67,8 +67,8 @@ certificates:
   ca-certs:
     - out: "./root_ca"
     - out: "./intermediate_ca"
-      cert-path: "./root_ca/ca.crt"
-      key-path: "./root_ca/ca.key"
+      ca-certificate: "./root_ca/ca.crt"
+      ca-key: "./root_ca/ca.key"
       days: 5
   node-certs:
     - out: "./node1"
