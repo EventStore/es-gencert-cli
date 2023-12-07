@@ -12,10 +12,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -23,7 +21,9 @@ import (
 )
 
 type CreateNode struct {
-	Ui cli.Ui
+	Ui     cli.Ui
+	Flags  *flag.FlagSet
+	Config CreateNodeArguments
 }
 
 type CreateNodeArguments struct {
@@ -34,7 +34,24 @@ type CreateNodeArguments struct {
 	Days              int    `yaml:"days"`
 	OutputDir         string `yaml:"out"`
 	CommonName        string `yaml:"common-name"`
+	Name              string `yaml:"name"`
 	Force             bool   `yaml:"force"`
+}
+
+func NewCreateNode(ui cli.Ui) *CreateNode {
+	c := &CreateNode{Ui: ui}
+
+	c.Flags = flag.NewFlagSet("create_node", flag.ContinueOnError)
+	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "./ca/ca.crt", CaPathFlagUsage)
+	c.Flags.StringVar(&c.Config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
+	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "./ca/ca.key", CaKeyFlagUsage)
+	c.Flags.StringVar(&c.Config.IPAddresses, "ip-addresses", "", "comma-separated list of IP addresses of the node")
+	c.Flags.StringVar(&c.Config.DNSNames, "dns-names", "", "comma-separated list of DNS names of the node")
+	c.Flags.IntVar(&c.Config.Days, "days", 0, DayFlagUsage)
+	c.Flags.StringVar(&c.Config.OutputDir, "out", "", OutDirFlagUsage)
+	c.Flags.StringVar(&c.Config.Name, "name", "node", NameFlagUsage)
+	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
+	return c
 }
 
 func parseIPAddresses(ipAddresses string) ([]net.IP, error) {
@@ -62,7 +79,7 @@ func parseDNSNames(dnsNames string) ([]string, error) {
 	return dns, nil
 }
 
-func getNodeOutputDirectory() (string, error) {
+func getOutputDirectory() (string, error) {
 	for i := 1; i <= 100; i++ {
 		dir := "node" + strconv.Itoa(i)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -73,38 +90,26 @@ func getNodeOutputDirectory() (string, error) {
 }
 
 func (c *CreateNode) Run(args []string) int {
-	var config CreateNodeArguments
-
-	flags := flag.NewFlagSet("create_node", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
-	flags.StringVar(&config.CACertificatePath, "ca-certificate", "./ca/ca.crt", "the path to the CA certificate file")
-	flags.StringVar(&config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
-	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
-	flags.StringVar(&config.IPAddresses, "ip-addresses", "", "comma-separated list of IP addresses of the node")
-	flags.StringVar(&config.DNSNames, "dns-names", "", "comma-separated list of DNS names of the node")
-	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
-	flags.StringVar(&config.OutputDir, "out", "", "The output directory")
-	flags.BoolVar(&config.Force, "force", false, forceOption)
-
-	if err := flags.Parse(args); err != nil {
+	if err := c.Flags.Parse(args); err != nil {
+		c.Ui.Error(err.Error())
 		return 1
 	}
 
 	validationErrors := new(multierror.Error)
-	if len(config.CACertificatePath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
+	if len(c.Config.CACertificatePath) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
 	}
 
-	if len(config.CAKeyPath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-key is a required field"))
+	if len(c.Config.CAKeyPath) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("ca-key is a required field"))
 	}
 
-	if len(config.IPAddresses) == 0 && len(config.DNSNames) == 0 {
-		multierror.Append(validationErrors, errors.New("at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names"))
+	if len(c.Config.IPAddresses) == 0 && len(c.Config.DNSNames) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names"))
 	}
 
-	if config.Days < 0 {
-		multierror.Append(validationErrors, errors.New("days must be positive"))
+	if c.Config.Days < 0 {
+		_ = multierror.Append(validationErrors, errors.New("days must be positive"))
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
@@ -112,36 +117,36 @@ func (c *CreateNode) Run(args []string) int {
 		return 1
 	}
 
-	caCert, err := readCertificateFromFile(config.CACertificatePath)
+	caCert, err := readCertificateFromFile(c.Config.CACertificatePath)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	caKey, err := readRSAKeyFromFile(config.CAKeyPath)
+	caKey, err := readRSAKeyFromFile(c.Config.CAKeyPath)
 	if err != nil {
 		err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	ips, err := parseIPAddresses(config.IPAddresses)
+	ips, err := parseIPAddresses(c.Config.IPAddresses)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	dnsNames, err := parseDNSNames(config.DNSNames)
+	dnsNames, err := parseDNSNames(c.Config.DNSNames)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	outputDir := config.OutputDir
-	outputBaseFileName := "node"
+	outputDir := c.Config.OutputDir
+	outputBaseFileName := c.Config.Name
 
 	if len(outputDir) == 0 {
-		outputDir, err = getNodeOutputDirectory()
+		outputDir, err = getOutputDirectory()
 		if err != nil {
 			c.Ui.Error(err.Error())
 			return 1
@@ -149,17 +154,9 @@ func (c *CreateNode) Run(args []string) int {
 		outputBaseFileName = outputDir
 	}
 
-	// check if certificates already exist
-	keyPath := path.Join(config.OutputDir, fmt.Sprintf("%s.key", outputBaseFileName))
-	crtPath := path.Join(config.OutputDir, fmt.Sprintf("%s.crt", outputBaseFileName))
-
-	if fileExists(keyPath, config.Force) {
-		c.Ui.Error(ErrFileExists)
-		return 1
-	}
-
-	if fileExists(crtPath, config.Force) {
-		c.Ui.Error(ErrFileExists)
+	certErr := checkCertificatesLocationWithForce(outputDir, outputBaseFileName, c.Config.Force)
+	if certErr != nil {
+		c.Ui.Error(certErr.Error())
 		return 1
 	}
 
@@ -167,12 +164,12 @@ func (c *CreateNode) Run(args []string) int {
 	years := 1
 	days := 0
 
-	if config.Days != 0 {
-		days = config.Days
+	if c.Config.Days != 0 {
+		days = c.Config.Days
 		years = 0
 	}
 
-	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName, config.CommonName, config.Force)
+	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName, c.Config.CommonName, c.Config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -187,7 +184,18 @@ func (c *CreateNode) Run(args []string) int {
 	return 0
 }
 
-func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string, commonName string, force bool) error {
+func generateNodeCertificate(
+	caCert *x509.Certificate,
+	caPrivateKey *rsa.PrivateKey,
+	ips []net.IP,
+	dnsNames []string,
+	years int,
+	days int,
+	outputDir string,
+	outputBaseFileName string,
+	commonName string,
+	force bool,
+) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -219,7 +227,7 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	}
 
 	privateKeyPem := new(bytes.Buffer)
-	pem.Encode(privateKeyPem, &pem.Block{
+	err = pem.Encode(privateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
@@ -247,28 +255,10 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 }
 
 func (c *CreateNode) Help() string {
-	var buffer bytes.Buffer
-
-	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0) // 2 spaces minimum gap between columns
-
-	fmt.Fprintln(w, "Usage: create_node [options]")
-	fmt.Fprintln(w, c.Synopsis())
-	fmt.Fprintln(w, "Options:")
-
-	writeHelpOption(w, "ca-certificate", "The path to the CA certificate file (default: ./ca/ca.crt).")
-	writeHelpOption(w, "ca-key", "The path to the CA key file (default: ./ca/ca.key).")
-	writeHelpOption(w, "days", "The validity period of the certificates in days (default: 1 year).")
-	writeHelpOption(w, "out", "The output directory (default: ./nodeX where X is an auto-generated number).")
-	writeHelpOption(w, "ip-addresses", "Comma-separated list of IP addresses of the node.")
-	writeHelpOption(w, "dns-names", "Comma-separated list of DNS names of the node.")
-	writeHelpOption(w, "common-name", "The certificate subject common name.")
-	writeHelpOption(w, "force", forceOption)
-
-	fmt.Fprintln(w, "\nAt least one IP address or DNS name needs to be specified.")
-
-	w.Flush()
-
-	return strings.TrimSpace(buffer.String())
+	var helpText bytes.Buffer
+	c.Flags.SetOutput(&helpText)
+	c.Flags.PrintDefaults()
+	return helpText.String()
 }
 
 func (c *CreateNode) Synopsis() string {

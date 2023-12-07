@@ -94,6 +94,8 @@ certificates:
       dns-names: "localhost,eventstore-node2.localhost.com"
 ```
 
+If you want to specify the name of the certificates from the config file, you can add the name field to the certificate definition. You can see an example of this in the [example configuration](references/named_certs.yml).
+
 ## Development
 
 Building or working on `es-gencert-cli` requires a Go environment, version 1.14 or higher.

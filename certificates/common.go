@@ -11,16 +11,18 @@ import (
 	"math/big"
 	"os"
 	"path"
-	"text/tabwriter"
+	"path/filepath"
 )
-
-const defaultKeySize = 2048
-
-const forceOption = "Force overwrite of existing files without prompting"
 
 const (
-	ErrFileExists = "Error: Existing files would be overwritten. Use -force to proceed"
+	ForceFlagUsage  = "Force overwrite of existing files without prompting"
+	NameFlagUsage   = "The name of the CA certificate and key file"
+	OutDirFlagUsage = "The output directory"
+	DayFlagUsage    = "the validity period of the certificate in days"
+	CaKeyFlagUsage  = "the path to the CA key file"
+	CaPathFlagUsage = "the path to the CA certificate file"
 )
+const defaultKeySize = 2048
 
 func generateSerialNumber(bits uint) (*big.Int, error) {
 	maxValue := new(big.Int).Lsh(big.NewInt(1), bits)
@@ -48,13 +50,9 @@ func writeFileWithDir(filePath string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(filePath, data, perm)
 }
 
-func writeHelpOption(w *tabwriter.Writer, title string, description string) {
-	fmt.Fprintf(w, "\t-%s\t%s\n", title, description)
-}
-
 func writeCertAndKey(outputDir string, fileName string, certPem, privateKeyPem *bytes.Buffer, force bool) error {
-	certFile := path.Join(outputDir, fileName+".crt")
-	keyFile := path.Join(outputDir, fileName+".key")
+	certFile := filepath.Join(outputDir, fileName+".crt")
+	keyFile := filepath.Join(outputDir, fileName+".key")
 
 	if force {
 		if _, err := os.Stat(certFile); err == nil {
@@ -71,22 +69,15 @@ func writeCertAndKey(outputDir string, fileName string, certPem, privateKeyPem *
 
 	err := writeFileWithDir(certFile, certPem.Bytes(), 0444)
 	if err != nil {
-		return fmt.Errorf("error writing certificate to %s: %s", certFile, err.Error())
+		return fmt.Errorf("error writing CA certificate to %s: %s", certFile, err.Error())
 	}
 
 	err = writeFileWithDir(keyFile, privateKeyPem.Bytes(), 0400)
 	if err != nil {
-		return fmt.Errorf("error writing certificate private key to %s: %s", keyFile, err.Error())
+		return fmt.Errorf("error writing CA's private key to %s: %s", keyFile, err.Error())
 	}
 
 	return nil
-}
-
-func fileExists(path string, force bool) bool {
-	if _, err := os.Stat(path); !os.IsNotExist(err) && !force {
-		return true
-	}
-	return false
 }
 
 func readCertificateFromFile(path string) (*x509.Certificate, error) {
@@ -123,4 +114,20 @@ func readRSAKeyFromFile(path string) (*rsa.PrivateKey, error) {
 		return nil, fmt.Errorf("error parsing RSA key from ASN.1 DER data in file: %s", path)
 	}
 	return key, nil
+}
+
+func checkCertificatesLocationWithForce(dir, certificateName string, force bool) error {
+	// Throw an error if the path for the CA and key certificates already
+	// exists and the 'force' flag is not set.
+
+	checkFile := func(ext string) bool {
+		_, err := os.Stat(filepath.Join(dir, certificateName+ext))
+		return !os.IsNotExist(err)
+	}
+
+	if !force && (checkFile(".key") || checkFile(".crt")) {
+		return fmt.Errorf("existing files would be overwritten. Use -force to proceed")
+	}
+
+	return nil
 }

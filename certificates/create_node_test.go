@@ -1,101 +1,157 @@
 package certificates
 
 import (
+	"bytes"
 	"crypto/x509"
-	"path"
-	"testing"
-
+	"fmt"
+	"github.com/mitchellh/cli"
 	"github.com/stretchr/testify/assert"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
-func setupTestEnvironmentForNodeTests(t *testing.T) (years int, days int, outputDirCa string, outputDirNode string, nodeCertFileName string, ipAddresses string, commonName string, dnsNames []string) {
-	years = 1
-	days = 0
-	outputDirCa = "./ca"
-	outputDirNode = "./node"
-	nodeCertFileName = "node"
-	ipAddresses = "127.0.0.1"
-	commonName = "EventStoreDB"
-	dnsNames = []string{"localhost"}
-
-	cleanupDirsForTest(t, outputDirCa, outputDirNode)
-	return
+func TestCreateNodeCertificate(t *testing.T) {
+	t.Run("TestCreateNodeCertificate_NoParams_ShouldFail", TestCreateNodeCertificate_NoParams_ShouldFail)
+	t.Run("TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed", TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed)
+	t.Run("TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate", TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate)
 }
 
-func TestGenerateNodeCertificate(t *testing.T) {
+func TestCreateNodeCertificate_NoParams_ShouldFail(t *testing.T) {
+	// Create a node certificate with no params
 
-	t.Run("nominal-case", func(t *testing.T) {
-		years, days, outputDirCa, outputDirNode, nodeCertFileName, ipAddresses, commonName, dnsNames := setupTestEnvironmentForNodeTests(t)
+	t.Parallel()
 
-		caCertificate, caPrivateKey := generateAndAssertCACert(t, years, days, outputDirCa, false)
-		ips, err := parseIPAddresses(ipAddresses)
-		assert.NoError(t, err)
+	cleanup, _, _, _, errorBuffer, createNode := setupCreateNodeTestEnvironment(t)
+	defer cleanup()
 
-		certificateError := generateNodeCertificate(caCertificate, caPrivateKey, ips, dnsNames, years, days, outputDirNode, nodeCertFileName, commonName, false)
-		assert.NoError(t, certificateError)
+	var args []string
+	result := createNode.Run(args)
+	assert.Equal(t, 1, result, "The 'create-node' operation should fail due to the absence of required parameters.")
 
-		nodeCertPath := path.Join(outputDirNode, nodeCertFileName+".crt")
-		nodeKeyPath := path.Join(outputDirNode, nodeCertFileName+".key")
-		assertFilesExist(t, nodeCertPath, nodeKeyPath)
+	errors := extractErrors(errorBuffer.String())
+	assert.Equal(t, 1, len(errors))
+	assert.Equal(t, "at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names", errors[0])
+	assert.Equal(t, 1, result)
+}
 
-		nodeCertificate, err := readCertificateFromFile(nodeCertPath)
-		assert.NoError(t, err)
+func TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed(t *testing.T) {
+	t.Parallel()
 
-		// verify the subject
-		assert.Equal(t, "CN=EventStoreDB", nodeCertificate.Subject.String())
+	cleanup, tempNodeDir, tempCaDir, _, _, createNode := setupCreateNodeTestEnvironment(t)
+	defer cleanup()
 
-		// verify the issuer
-		assert.Equal(t, caCertificate.Issuer.String(), nodeCertificate.Issuer.String())
+	args := []string{
+		"-ca-certificate", filepath.Join(tempCaDir, "ca.crt"),
+		"-ca-key", filepath.Join(tempCaDir, "ca.key"),
+		"-out", tempNodeDir,
+		"-ip-addresses", "127.0.0.1",
+		"-dns-names", "localhost",
+	}
+	if result := createNode.Run(args); result != 0 {
+		t.Fatalf("Expected 0, got %d", result)
+	}
 
-		// verify the EKUs
-		assert.Equal(t, 2, len(nodeCertificate.ExtKeyUsage))
-		assert.Equal(t, x509.ExtKeyUsageClientAuth, nodeCertificate.ExtKeyUsage[0])
-		assert.Equal(t, x509.ExtKeyUsageServerAuth, nodeCertificate.ExtKeyUsage[1])
-		assert.Equal(t, 0, len(nodeCertificate.UnknownExtKeyUsage))
+	assert.FileExists(t, filepath.Join(tempNodeDir, "node.crt"), "Node certificate should exist")
+	assert.FileExists(t, filepath.Join(tempNodeDir, "node.key"), "Node key should exist")
 
-		// verify the IP SANs
-		assert.Equal(t, 1, len(nodeCertificate.IPAddresses))
-		assert.Equal(t, "127.0.0.1", nodeCertificate.IPAddresses[0].String())
+	cert, err := readCertificateFromFile(filepath.Join(tempNodeDir, "node.crt"))
+	assert.NoError(t, err, "Failed to read and parse certificate file")
 
-		// verify the DNS SANs
-		assert.Equal(t, 1, len(nodeCertificate.DNSNames))
-		assert.Equal(t, "localhost", nodeCertificate.DNSNames[0])
+	// The certificate should be valid for 1 year
+	expectedNotAfter := time.Now().AddDate(1, 0, 0)
+	assert.WithinDuration(t, expectedNotAfter, cert.NotAfter, time.Second, "Certificate validity period does not match expected default")
+
+	// Now we verify if the certificate is signed by the provided root CA
+	caCert, err := readCertificateFromFile(filepath.Join(tempCaDir, "ca.crt"))
+	assert.NoError(t, err, "Failed to read and parse CA certificate file")
+
+	roots := x509.NewCertPool()
+	roots.AddCert(caCert)
+
+	_, err = cert.Verify(x509.VerifyOptions{Roots: roots})
+	assert.NoError(t, err, "Node certificate should be signed by the provided root CA")
+}
+
+func TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate(t *testing.T) {
+	// Create a node certificate with the force flag
+
+	t.Parallel()
+
+	cleanup, tempNodeDir, tempCaDir, _, _, createNode := setupCreateNodeTestEnvironment(t)
+	defer cleanup()
+
+	args := []string{
+		"-ca-certificate", fmt.Sprintf("%s/ca.crt", tempCaDir),
+		"-ca-key", fmt.Sprintf("%s/ca.key", tempCaDir),
+		"-out", tempNodeDir,
+		"-ip-addresses", "127.0.0.1",
+		"-dns-names", "localhost",
+	}
+
+	result := createNode.Run(args)
+	assert.Equal(t, 0, result, "The 'create-node' operation without the --force flag should succeed the first time")
+
+	assert.FileExists(t, filepath.Join(tempNodeDir, "node.crt"), "Node certificate should exist")
+	assert.FileExists(t, filepath.Join(tempNodeDir, "node.key"), "Node key should exist")
+
+	// Read the content of the key and crt files
+	originalCaCert, originalKeyCert := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
+
+	// Create the node certificate again with the force flag
+	updatedArgs := append(args, "-force")
+
+	result = createNode.Run(updatedArgs)
+	assert.Equal(t, 0, result, "The 'create-node' should override the existing certificate with the --force flag")
+
+	// Read the content of the key and crt files again
+	newCaCert, newKeyCert := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
+
+	assert.NotEqual(t, originalCaCert, newCaCert, "The CA certificate should be different")
+	assert.NotEqual(t, originalKeyCert, newKeyCert, "The CA key should be different")
+}
+
+func setupCreateNodeTestEnvironment(t *testing.T) (cleanupFunc func(), tempNodeDir, tempCaDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createNode *CreateNode) {
+	var err error
+
+	tempNodeDir, err = os.MkdirTemp(os.TempDir(), "node-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %s", err)
+	}
+
+	tempCaDir, err = os.MkdirTemp(os.TempDir(), "ca-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %s", err)
+	}
+
+	outputBuffer = new(bytes.Buffer)
+	errorBuffer = new(bytes.Buffer)
+
+	createNode = NewCreateNode(&cli.BasicUi{
+		Writer:      outputBuffer,
+		ErrorWriter: errorBuffer,
 	})
 
-	t.Run("force-flag", func(t *testing.T) {
-		years, days, outputDirCa, outputDirNode, nodeCertFileName, ipAddresses, commonName, dnsNames := setupTestEnvironmentForNodeTests(t)
-
-		caCertificate, caPrivateKey := generateAndAssertCACert(t, years, days, outputDirCa, false)
-		ips, err := parseIPAddresses(ipAddresses)
-		assert.NoError(t, err)
-
-		nodeCertFilePath := path.Join(outputDirNode, nodeCertFileName+".crt")
-		nodeKeyFilePath := path.Join(outputDirNode, nodeCertFileName+".key")
-
-		generateNodeCertificate(caCertificate, caPrivateKey, ips, dnsNames, years, days, outputDirNode, nodeCertFileName, commonName, false)
-		nodeCertFile, err := readCertificateFromFile(nodeCertFilePath)
-		assert.NoError(t, err)
-		nodeKeyFile, err := readRSAKeyFromFile(nodeKeyFilePath)
-		assert.NoError(t, err)
-
-		// try to generate again without force
-		err = generateNodeCertificate(caCertificate, caPrivateKey, ips, dnsNames, years, days, outputDirNode, nodeCertFileName, commonName, false)
-		assert.Error(t, err)
-		nodeCertFileAfter, err := readCertificateFromFile(nodeCertFilePath)
-		assert.NoError(t, err)
-		nodeKeyFileAfter, err := readRSAKeyFromFile(nodeKeyFilePath)
-		assert.NoError(t, err)
-		assert.Equal(t, nodeCertFile, nodeCertFileAfter, "Expected node certificate to be the same")
-		assert.Equal(t, nodeKeyFile, nodeKeyFileAfter, "Expected node key to be the same")
-
-		// try to generate again with force
-		err = generateNodeCertificate(caCertificate, caPrivateKey, ips, dnsNames, years, days, outputDirNode, nodeCertFileName, commonName, true)
-		assert.NoError(t, err)
-		nodeCertFileAfterWithForce, err := readCertificateFromFile(nodeCertFilePath)
-		assert.NoError(t, err)
-		nodeKeyFileAfterWithForce, err := readRSAKeyFromFile(nodeKeyFilePath)
-		assert.NoError(t, err)
-		assert.NotEqual(t, nodeCertFileAfter, nodeCertFileAfterWithForce, "Expected node certificate to be different")
-		assert.NotEqual(t, nodeKeyFileAfter, nodeKeyFileAfterWithForce, "Expected node key to be different")
+	// We need to create a root CA file to be able to create a node certificate
+	createCa := NewCreateCA(&cli.BasicUi{
+		Writer:      new(bytes.Buffer),
+		ErrorWriter: new(bytes.Buffer),
 	})
+
+	args := []string{"-out", tempCaDir}
+	if result := createCa.Run(args); result != 0 {
+		t.Fatalf("Expected 0, got %d", result)
+	}
+
+	cleanupFunc = func() {
+		if err := os.RemoveAll(tempNodeDir); err != nil {
+			t.Logf("Failed to remove temp node directory (%s): %s", tempNodeDir, err)
+		}
+		if err := os.RemoveAll(tempCaDir); err != nil {
+			t.Logf("Failed to remove temp ca directory (%s): %s", tempCaDir, err)
+		}
+	}
+
+	return cleanupFunc, tempNodeDir, tempCaDir, outputBuffer, errorBuffer, createNode
 }

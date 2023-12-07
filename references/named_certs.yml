@@ -1,0 +1,28 @@
+certificates:
+  ca-certs:
+    - out: "./root_ca"
+      name: "root"
+    - out: "./intermediate_ca"
+      name: "intermediate"
+      ca-certificate: "./root_ca/root.crt"
+      ca-key: "./root_ca/root.key"
+      days: 5
+  node-certs:
+    - out: "./node1"
+      name: "node1"
+      ca-certificate: "./intermediate_ca/intermediate.crt"
+      ca-key: "./intermediate_ca/intermediate.key"
+      ip-addresses: "127.0.0.1,172.20.240.1"
+      dns-names: "localhost,eventstore-node1.localhost.com"
+    - out: "./node2"
+      name: "node2"
+      ca-certificate: "./intermediate_ca/intermediate.crt"
+      ca-key: "./intermediate_ca/intermediate.key"
+      ip-addresses: "127.0.0.2,172.20.240.2"
+      dns-names: "localhost,eventstore-node2.localhost.com"
+    - out: "./node3"
+      name: "node3"
+      ca-certificate: "./intermediate_ca/intermediate.crt"
+      ca-key: "./intermediate_ca/intermediate.key"
+      ip-addresses: "127.0.0.3,172.20.240.3"
+      dns-names: "localhost,eventstore-node2.localhost.com"

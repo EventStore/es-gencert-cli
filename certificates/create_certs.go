@@ -4,19 +4,18 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"github.com/mitchellh/cli"
+	"gopkg.in/yaml.v3"
 	"os"
-	"path"
 	"reflect"
 	"strings"
 	"sync"
-	"text/tabwriter"
-
-	"github.com/mitchellh/cli"
-	"gopkg.in/yaml.v3"
 )
 
 type CreateCertificates struct {
-	Ui cli.Ui
+	Ui     cli.Ui
+	Config CreateCertificateArguments
+	Flags  *flag.FlagSet
 }
 
 type CreateCertificateArguments struct {
@@ -31,17 +30,22 @@ type Config struct {
 	} `yaml:"certificates"`
 }
 
-func (c *CreateCertificates) Run(args []string) int {
-	var arguments CreateCertificateArguments
-	flags := flag.NewFlagSet("create_certs", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
-	flags.StringVar(&arguments.ConfigPath, "config-file", "./certs.yml", "The config yml file")
-	flags.BoolVar(&arguments.Force, "force", false, forceOption)
+func NewCreateCerts(ui cli.Ui) *CreateCertificates {
+	c := &CreateCertificates{Ui: ui}
 
-	if err := flags.Parse(args); err != nil {
+	c.Flags = flag.NewFlagSet("create_certs", flag.ContinueOnError)
+	c.Flags.StringVar(&c.Config.ConfigPath, "config-file", "./certs.yml", "The config yml file")
+	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
+	return c
+}
+
+func (c *CreateCertificates) Run(args []string) int {
+	if err := c.Flags.Parse(args); err != nil {
+		c.Ui.Error(err.Error())
 		return 1
 	}
-	configData, err := os.ReadFile(arguments.ConfigPath)
+
+	configData, err := os.ReadFile(c.Config.ConfigPath)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -53,65 +57,55 @@ func (c *CreateCertificates) Run(args []string) int {
 		return 1
 	}
 
-	if err := c.checkPaths(config, arguments.Force); err {
-		c.Ui.Error(ErrFileExists)
+	certErr := c.checkPaths(config, c.Config.Force)
+	if certErr != nil {
+		c.Ui.Error(certErr.Error())
 		return 1
 	}
 
-	if c.generateCaCerts(config, arguments.Force) != 0 || c.generateNodes(config, arguments.Force) != 0 {
+	if c.generateCaCerts(config, c.Config.Force) != 0 || c.generateNodes(config, c.Config.Force) != 0 {
 		return 1
 	}
 
 	return 0
 }
 
-func (c *CreateCertificates) checkPaths(config Config, force bool) bool {
-	// If any certs file exists and the force flag isn't provided, it returns an
-	// error. Otherwise, it returns false, indicating that certificate generation
-	// can proceed safely.
-
-	var errorMutex sync.Mutex
-	var error bool
+func (c *CreateCertificates) checkPaths(config Config, force bool) error {
+	var once sync.Once
+	var certError error
 	var wg sync.WaitGroup
 
-	checkFile := func(filePath string) {
+	checkCertFiles := func(certificateName, dir string) {
 		defer wg.Done()
-		if fileExists(filePath, force) {
-			errorMutex.Lock()
-			error = true
-			errorMutex.Unlock()
+		if err := checkCertificatesLocationWithForce(dir, certificateName, force); err != nil {
+			once.Do(func() {
+				certError = err
+			})
 		}
 	}
 
 	// Check CA certificate and key paths
 	for _, caCert := range config.Certificates.CaCerts {
-		wg.Add(2)
-		go checkFile(caCert.CACertificatePath)
-		go checkFile(caCert.CAKeyPath)
+		wg.Add(1)
+		go checkCertFiles(caCert.Name, caCert.OutputDir)
 	}
 
 	// Check Node certificate and key paths
 	for _, node := range config.Certificates.Nodes {
-		wg.Add(4)
-		go checkFile(node.CACertificatePath)
-		go checkFile(node.CAKeyPath)
-		go checkFile(path.Join(node.OutputDir, "node.crt"))
-		go checkFile(path.Join(node.OutputDir, "node.key"))
+		wg.Add(1)
+		go checkCertFiles(node.Name, node.OutputDir)
 	}
 
 	wg.Wait()
-	return error
+	return certError
 }
-
 func (c *CreateCertificates) generateNodes(config Config, force bool) int {
 	for _, node := range config.Certificates.Nodes {
 		node.Force = force
-		createNode := CreateNode{
-			Ui: &cli.ColoredUi{
-				Ui:          c.Ui,
-				OutputColor: cli.UiColorBlue,
-			},
-		}
+		createNode := NewCreateNode(&cli.ColoredUi{
+			Ui:          c.Ui,
+			OutputColor: cli.UiColorBlue,
+		})
 		if createNode.Run(toArguments(node)) != 0 {
 			return 1
 		}
@@ -120,19 +114,16 @@ func (c *CreateCertificates) generateNodes(config Config, force bool) int {
 }
 
 func (c *CreateCertificates) generateCaCerts(config Config, force bool) int {
-	coloredUI := &cli.ColoredUi{
-		Ui:          c.Ui,
-		OutputColor: cli.UiColorBlue,
-	}
-
 	for _, caCert := range config.Certificates.CaCerts {
 		caCert.Force = force
-		caCreator := CreateCA{Ui: coloredUI}
+		caCreator := NewCreateCA(&cli.ColoredUi{
+			Ui:          c.Ui,
+			OutputColor: cli.UiColorBlue,
+		})
 		if caCreator.Run(toArguments(caCert)) != 0 {
 			return 1
 		}
 	}
-
 	return 0
 }
 
@@ -157,20 +148,10 @@ func toArguments(config interface{}) []string {
 }
 
 func (c *CreateCertificates) Help() string {
-	var buffer bytes.Buffer
-
-	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(w, "Usage: create_certs [options]")
-	fmt.Fprintln(w, c.Synopsis())
-	fmt.Fprintln(w, "Options:")
-
-	writeHelpOption(w, "config-file", "The path to the yml config file.")
-	writeHelpOption(w, "force", forceOption)
-
-	w.Flush()
-
-	return strings.TrimSpace(buffer.String())
+	var helpText bytes.Buffer
+	c.Flags.SetOutput(&helpText)
+	c.Flags.PrintDefaults()
+	return helpText.String()
 }
 
 func (c *CreateCertificates) Synopsis() string {
