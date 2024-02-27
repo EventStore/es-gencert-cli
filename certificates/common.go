@@ -9,6 +9,9 @@ import (
 	"os"
 	"path"
 	"text/tabwriter"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 )
 
 const defaultKeySize = 2048
@@ -84,4 +87,40 @@ func fileExists(path string, force bool) bool {
 		return true
 	}
 	return false
+}
+
+func readCertificateFromFile(path string) (*x509.Certificate, error) {
+	pemBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file: %s", err.Error())
+	}
+
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("error decoding PEM data from file: %s", path)
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing certificate from ASN.1 DER data in file: %s", path)
+	}
+	return cert, nil
+}
+
+func readRSAKeyFromFile(path string) (*rsa.PrivateKey, error) {
+	keyBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file: %s", err.Error())
+	}
+
+	block, _ := pem.Decode(keyBytes)
+	if block == nil {
+		return nil, fmt.Errorf("error decoding PEM data from file: %s", path)
+	}
+
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing RSA key from ASN.1 DER data in file: %s", path)
+	}
+	return key, nil
 }

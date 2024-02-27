@@ -37,42 +37,6 @@ type CreateNodeArguments struct {
 	Force             bool   `yaml:"force"`
 }
 
-func readCertificateFromFile(path string) (*x509.Certificate, error) {
-	pemBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file: %s", err.Error())
-	}
-
-	block, _ := pem.Decode(pemBytes)
-	if block == nil {
-		return nil, fmt.Errorf("error decoding PEM data from file: %s", path)
-	}
-
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing certificate from ASN.1 DER data in file: %s", path)
-	}
-	return cert, nil
-}
-
-func readRSAKeyFromFile(path string) (*rsa.PrivateKey, error) {
-	keyBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file: %s", err.Error())
-	}
-
-	block, _ := pem.Decode(keyBytes)
-	if block == nil {
-		return nil, fmt.Errorf("error decoding PEM data from file: %s", path)
-	}
-
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing RSA key from ASN.1 DER data in file: %s", path)
-	}
-	return key, nil
-}
-
 func parseIPAddresses(ipAddresses string) ([]net.IP, error) {
 	if len(ipAddresses) == 0 {
 		return []net.IP{}, nil
@@ -98,7 +62,7 @@ func parseDNSNames(dnsNames string) ([]string, error) {
 	return dns, nil
 }
 
-func getOutputDirectory() (string, error) {
+func getNodeOutputDirectory() (string, error) {
 	for i := 1; i <= 100; i++ {
 		dir := "node" + strconv.Itoa(i)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -177,7 +141,7 @@ func (c *CreateNode) Run(args []string) int {
 	outputBaseFileName := "node"
 
 	if len(outputDir) == 0 {
-		outputDir, err = getOutputDirectory()
+		outputDir, err = getNodeOutputDirectory()
 		if err != nil {
 			c.Ui.Error(err.Error())
 			return 1

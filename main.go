@@ -61,6 +61,14 @@ func main() {
 				},
 			}, nil
 		},
+		"create-user": func() (cli.Command, error) {
+			return &certificates.CreateUser{
+				Ui: &cli.ColoredUi{
+					Ui:          ui,
+					OutputColor: cli.UiColorBlue,
+				},
+			}, nil
+		},
 	}
 	c.HelpFunc = createGeneralHelpFunc(appName, flags)
 

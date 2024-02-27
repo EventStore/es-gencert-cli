@@ -66,6 +66,29 @@ func TestGenerateNodeCertificate(t *testing.T) {
 		nodeKeyPath := path.Join(OutputDirNode, NodeCertFileName+".key")
 		assertFilesExist(t, nodeCertPath, nodeKeyPath)
 
+		nodeCertificate, err := readCertificateFromFile(nodeCertPath)
+		assert.NoError(t, err)
+
+		// verify the subject
+		assert.Equal(t, "CN=EventStoreDB", nodeCertificate.Subject.String())
+
+		// verify the issuer
+		assert.Equal(t, caCertificate.Issuer.String(), nodeCertificate.Issuer.String())
+
+		// verify the EKUs
+		assert.Equal(t, 2, len(nodeCertificate.ExtKeyUsage))
+		assert.Equal(t, x509.ExtKeyUsageClientAuth, nodeCertificate.ExtKeyUsage[0])
+		assert.Equal(t, x509.ExtKeyUsageServerAuth, nodeCertificate.ExtKeyUsage[1])
+		assert.Equal(t, 0, len(nodeCertificate.UnknownExtKeyUsage))
+
+		// verify the IP SANs
+		assert.Equal(t, 1, len(nodeCertificate.IPAddresses))
+		assert.Equal(t, "127.0.0.1", nodeCertificate.IPAddresses[0].String())
+
+		// verify the DNS SANs
+		assert.Equal(t, 1, len(nodeCertificate.DNSNames))
+		assert.Equal(t, "localhost", nodeCertificate.DNSNames[0])
+
 		cleanup()
 	})
 
