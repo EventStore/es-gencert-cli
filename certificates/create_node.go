@@ -84,7 +84,7 @@ func (c *CreateNode) Run(args []string) int {
 	flags.StringVar(&config.DNSNames, "dns-names", "", "comma-separated list of DNS names of the node")
 	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
 	flags.StringVar(&config.OutputDir, "out", "", "The output directory")
-	flags.BoolVar(&config.Force, "force", false, "Force overwrite of existing files without prompting")
+	flags.BoolVar(&config.Force, "force", false, forceOption)
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -241,7 +241,7 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 		return fmt.Errorf("could not encode certificate to PEM format: %s", err.Error())
 	}
 
-	err = writeCACertAndKey(outputDir, outputBaseFileName, certPem, privateKeyPem, force)
+	err = writeCertAndKey(outputDir, outputBaseFileName, certPem, privateKeyPem, force)
 
 	return err
 }
@@ -252,7 +252,7 @@ func (c *CreateNode) Help() string {
 	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0) // 2 spaces minimum gap between columns
 
 	fmt.Fprintln(w, "Usage: create_node [options]")
-	fmt.Fprintln(w, "Generate a node/server TLS certificate to be used with EventStoreDB.")
+	fmt.Fprintln(w, c.Synopsis())
 	fmt.Fprintln(w, "Options:")
 
 	writeHelpOption(w, "ca-certificate", "The path to the CA certificate file (default: ./ca/ca.crt).")

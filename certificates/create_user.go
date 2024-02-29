@@ -10,10 +10,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"path"
-	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -30,22 +29,7 @@ type CreateUserArguments struct {
 	CAKeyPath         string `yaml:"ca-key"`
 	Days              int    `yaml:"days"`
 	OutputDir         string `yaml:"out"`
-}
-
-func getUserOutputDirectory(username string) (string, error) {
-	dir := "user-" + username
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return dir, nil
-	}
-
-	for i := 1; i <= 100; i++ {
-		dir = "user-" + username + strconv.Itoa(i)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			return dir, nil
-		}
-	}
-
-	return "", fmt.Errorf("could not obtain a proper name for output directory")
+	Force             bool   `yaml:"force"`
 }
 
 func (c *CreateUser) Run(args []string) int {
@@ -58,6 +42,7 @@ func (c *CreateUser) Run(args []string) int {
 	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
 	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
 	flags.StringVar(&config.OutputDir, "out", "", "The output directory")
+	flags.BoolVar(&config.Force, "force", false, forceOption)
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -103,12 +88,18 @@ func (c *CreateUser) Run(args []string) int {
 	outputBaseFileName := "user-" + config.Username
 
 	if len(outputDir) == 0 {
-		outputDir, err = getUserOutputDirectory(config.Username)
-		if err != nil {
-			c.Ui.Error(err.Error())
-			return 1
-		}
-		outputBaseFileName = outputDir
+		outputDir = outputBaseFileName
+	}
+
+	// check if user certificates already exist
+	if fileExists(path.Join(outputDir, outputBaseFileName+".crt"), config.Force) {
+		c.Ui.Error(ErrFileExists)
+		return 1
+	}
+
+	if fileExists(path.Join(outputDir, outputBaseFileName+".key"), config.Force) {
+		c.Ui.Error(ErrFileExists)
+		return 1
 	}
 
 	/*default validity period*/
@@ -120,7 +111,7 @@ func (c *CreateUser) Run(args []string) int {
 		years = 0
 	}
 
-	err = generateUserCertificate(config.Username, caCert, caKey, years, days, outputDir, outputBaseFileName)
+	err = generateUserCertificate(config.Username, outputBaseFileName, caCert, caKey, years, days, outputDir, config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -135,7 +126,7 @@ func (c *CreateUser) Run(args []string) int {
 	return 0
 }
 
-func generateUserCertificate(username string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, years int, days int, outputDir string, outputBaseFileName string) error {
+func generateUserCertificate(username string, outputBaseFileName string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, years int, days int, outputDir string, force bool) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -159,7 +150,7 @@ func generateUserCertificate(username string, caCert *x509.Certificate, caPrivat
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(years, 0, days),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},	
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		SubjectKeyId:          subjectKeyID,
 		AuthorityKeyId:        authorityKeyID,
 	}
@@ -187,43 +178,30 @@ func generateUserCertificate(username string, caCert *x509.Certificate, caPrivat
 		return fmt.Errorf("could not encode certificate to PEM format: %s", err.Error())
 	}
 
-	err = os.Mkdir(outputDir, 0755)
-	if err != nil {
-		if !os.IsExist(err) {
-			return fmt.Errorf("could not create directory %s: %s", outputDir, err.Error())
-		}
-		if os.IsExist(err) {
-			return fmt.Errorf("output directory: %s already exists. please delete it and try again", outputDir)
-		}
-	}
+	err = writeCertAndKey(outputDir, outputBaseFileName, certPem, privateKeyPem, force)
 
-	certFile := fmt.Sprintf("%s.crt", outputBaseFileName)
-	err = os.WriteFile(path.Join(outputDir, certFile), certPem.Bytes(), 0444)
-	if err != nil {
-		return fmt.Errorf("error writing certificate to %s: %s", certFile, err.Error())
-	}
-
-	keyFile := fmt.Sprintf("%s.key", outputBaseFileName)
-	err = os.WriteFile(path.Join(outputDir, keyFile), privateKeyPem.Bytes(), 0400)
-	if err != nil {
-		return fmt.Errorf("error writing private key to %s: %s", keyFile, err.Error())
-	}
-
-	return nil
-
+	return err
 }
+
 func (c *CreateUser) Help() string {
-	helpText := `
-Usage: create_user [options]
-  Generate a user TLS certificate to be used with EventStoreDB clients
-Options:
-  -username                   The name of the EventStoreDB user
-  -ca-certificate             The path to the CA certificate file (default: ./ca/ca.crt)
-  -ca-key                     The path to the CA key file (default: ./ca/ca.key)
-  -days                       The validity period of the certificates in days (default: 1 year)
-  -out                        The output directory (default: ./user-<username>)
-`
-	return strings.TrimSpace(helpText)
+	var buffer bytes.Buffer
+
+	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
+
+	fmt.Fprintln(w, "Usage: create_user [options]")
+	fmt.Fprintln(w, c.Synopsis())
+	fmt.Fprintln(w, "Options:")
+
+	writeHelpOption(w, "username", "The name of the EventStoreDB user to generate a certificate for.")
+	writeHelpOption(w, "ca-certificate", "The path to the CA certificate file (default: ./ca/ca.crt).")
+	writeHelpOption(w, "ca-key", "The path to the CA key file (default: ./ca/ca.key).")
+	writeHelpOption(w, "days", "The validity period of the certificates in days (default: 1 year).")
+	writeHelpOption(w, "out", "The output directory (default: ./user-<username>).")
+	writeHelpOption(w, "force", forceOption)
+
+	w.Flush()
+
+	return strings.TrimSpace(buffer.String())
 }
 
 func (c *CreateUser) Synopsis() string {

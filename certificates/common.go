@@ -3,15 +3,15 @@ package certificates
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
 	"path"
 	"text/tabwriter"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 )
 
 const defaultKeySize = 2048
@@ -52,7 +52,7 @@ func writeHelpOption(w *tabwriter.Writer, title string, description string) {
 	fmt.Fprintf(w, "\t-%s\t%s\n", title, description)
 }
 
-func writeCACertAndKey(outputDir string, fileName string, certPem, privateKeyPem *bytes.Buffer, force bool) error {
+func writeCertAndKey(outputDir string, fileName string, certPem, privateKeyPem *bytes.Buffer, force bool) error {
 	certFile := path.Join(outputDir, fileName+".crt")
 	keyFile := path.Join(outputDir, fileName+".key")
 
@@ -71,12 +71,12 @@ func writeCACertAndKey(outputDir string, fileName string, certPem, privateKeyPem
 
 	err := writeFileWithDir(certFile, certPem.Bytes(), 0444)
 	if err != nil {
-		return fmt.Errorf("error writing CA certificate to %s: %s", certFile, err.Error())
+		return fmt.Errorf("error writing certificate to %s: %s", certFile, err.Error())
 	}
 
 	err = writeFileWithDir(keyFile, privateKeyPem.Bytes(), 0400)
 	if err != nil {
-		return fmt.Errorf("error writing CA's private key to %s: %s", keyFile, err.Error())
+		return fmt.Errorf("error writing certificate private key to %s: %s", keyFile, err.Error())
 	}
 
 	return nil

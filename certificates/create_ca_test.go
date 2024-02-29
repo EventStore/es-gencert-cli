@@ -3,24 +3,20 @@ package certificates
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"os"
 	"path"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func setupTestEnvironment(t *testing.T, override bool) (years int, days int, outputDir string, caCert *x509.Certificate, caKey *rsa.PrivateKey) {
+func setupTestEnvironmentForCaTests(t *testing.T) (years int, days int, outputDir string, caCert *x509.Certificate, caKey *rsa.PrivateKey) {
 	years = 1
 	days = 0
 	outputDir = "./ca"
 	caCert = nil
 	caKey = nil
 
-	t.Cleanup(func() {
-		os.RemoveAll(outputDir)
-	})
-
+	cleanupDirsForTest(t, outputDir)
 	return
 }
 
@@ -59,7 +55,7 @@ func testGenerateCACertificate(t *testing.T, years int, days int, outputDir stri
 
 func TestGenerateCACertificate(t *testing.T) {
 	t.Run("nominal-case", func(t *testing.T) {
-		years, days, outputDir, caCert, caKey := setupTestEnvironment(t, false)
+		years, days, outputDir, caCert, caKey := setupTestEnvironmentForCaTests(t)
 
 		err := generateCACertificate(years, days, outputDir, caCert, caKey, false)
 
@@ -70,12 +66,12 @@ func TestGenerateCACertificate(t *testing.T) {
 	})
 
 	t.Run("directory-exists", func(t *testing.T) {
-		years, days, outputDir, caCert, caKey := setupTestEnvironment(t, false)
+		years, days, outputDir, caCert, caKey := setupTestEnvironmentForCaTests(t)
 		testGenerateCACertificate(t, years, days, outputDir, caCert, caKey, false)
 	})
 
 	t.Run("directory-exists-force", func(t *testing.T) {
-		years, days, outputDir, caCert, caKey := setupTestEnvironment(t, true)
+		years, days, outputDir, caCert, caKey := setupTestEnvironmentForCaTests(t)
 		testGenerateCACertificate(t, years, days, outputDir, caCert, caKey, true)
 	})
 }
