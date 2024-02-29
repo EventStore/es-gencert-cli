@@ -81,6 +81,6 @@ func TestGenerateUserCertificate(t *testing.T) {
 		userCertificateKeyAfterWithForce, err := readRSAKeyFromFile(userKeyPath)
 		assert.NoError(t, err)
 		assert.NotEqual(t, userCertificate, userCertificateAfterWithForce, "Expected user certificate to be different")
-		assert.NotEqual(t, userCertificateKey, userCertificateKeyAfterWithForce, "Expected user key key to be different")
+		assert.NotEqual(t, userCertificateKey, userCertificateKeyAfterWithForce, "Expected user key to be different")
 	})
 }

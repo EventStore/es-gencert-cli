@@ -96,6 +96,6 @@ func TestGenerateNodeCertificate(t *testing.T) {
 		nodeKeyFileAfterWithForce, err := readRSAKeyFromFile(nodeKeyFilePath)
 		assert.NoError(t, err)
 		assert.NotEqual(t, nodeCertFileAfter, nodeCertFileAfterWithForce, "Expected node certificate to be different")
-		assert.NotEqual(t, nodeKeyFileAfter, nodeKeyFileAfterWithForce, "Expected node key key to be different")
+		assert.NotEqual(t, nodeKeyFileAfter, nodeKeyFileAfterWithForce, "Expected node key to be different")
 	})
 }
