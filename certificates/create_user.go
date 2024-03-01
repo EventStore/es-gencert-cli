@@ -10,10 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
-	"os"
 	"path"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -22,66 +19,27 @@ import (
 	"github.com/mitchellh/cli"
 )
 
-type CreateNode struct {
+type CreateUser struct {
 	Ui cli.Ui
 }
 
-type CreateNodeArguments struct {
+type CreateUserArguments struct {
+	Username          string `yaml:"username"`
 	CACertificatePath string `yaml:"ca-certificate"`
 	CAKeyPath         string `yaml:"ca-key"`
-	IPAddresses       string `yaml:"ip-addresses"`
-	DNSNames          string `yaml:"dns-names"`
 	Days              int    `yaml:"days"`
 	OutputDir         string `yaml:"out"`
-	CommonName        string `yaml:"common-name"`
 	Force             bool   `yaml:"force"`
 }
 
-func parseIPAddresses(ipAddresses string) ([]net.IP, error) {
-	if len(ipAddresses) == 0 {
-		return []net.IP{}, nil
-	}
-	ips := make([]net.IP, 0)
-	tokens := strings.Split(ipAddresses, ",")
-	for i := range tokens {
-		ip := net.ParseIP(tokens[i])
-		if ip == nil {
-			return nil, fmt.Errorf("invalid IP address: %s", tokens[i])
-		}
-		ips = append(ips, ip)
-	}
+func (c *CreateUser) Run(args []string) int {
+	var config CreateUserArguments
 
-	return ips, nil
-}
-
-func parseDNSNames(dnsNames string) ([]string, error) {
-	if len(dnsNames) == 0 {
-		return []string{}, nil
-	}
-	dns := strings.Split(dnsNames, ",")
-	return dns, nil
-}
-
-func getNodeOutputDirectory() (string, error) {
-	for i := 1; i <= 100; i++ {
-		dir := "node" + strconv.Itoa(i)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			return dir, nil
-		}
-	}
-	return "", fmt.Errorf("could not obtain a proper name for output directory")
-}
-
-func (c *CreateNode) Run(args []string) int {
-	var config CreateNodeArguments
-
-	flags := flag.NewFlagSet("create_node", flag.ContinueOnError)
+	flags := flag.NewFlagSet("create_user", flag.ContinueOnError)
 	flags.Usage = func() { c.Ui.Info(c.Help()) }
+	flags.StringVar(&config.Username, "username", "", "the EventStoreDB user")
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "./ca/ca.crt", "the path to the CA certificate file")
-	flags.StringVar(&config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
 	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
-	flags.StringVar(&config.IPAddresses, "ip-addresses", "", "comma-separated list of IP addresses of the node")
-	flags.StringVar(&config.DNSNames, "dns-names", "", "comma-separated list of DNS names of the node")
 	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
 	flags.StringVar(&config.OutputDir, "out", "", "The output directory")
 	flags.BoolVar(&config.Force, "force", false, forceOption)
@@ -91,16 +49,17 @@ func (c *CreateNode) Run(args []string) int {
 	}
 
 	validationErrors := new(multierror.Error)
+
+	if len(config.Username) == 0 {
+		multierror.Append(validationErrors, errors.New("username is a required field"))
+	}
+
 	if len(config.CACertificatePath) == 0 {
 		multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
 	}
 
 	if len(config.CAKeyPath) == 0 {
 		multierror.Append(validationErrors, errors.New("ca-key is a required field"))
-	}
-
-	if len(config.IPAddresses) == 0 && len(config.DNSNames) == 0 {
-		multierror.Append(validationErrors, errors.New("at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names"))
 	}
 
 	if config.Days < 0 {
@@ -125,40 +84,20 @@ func (c *CreateNode) Run(args []string) int {
 		return 1
 	}
 
-	ips, err := parseIPAddresses(config.IPAddresses)
-	if err != nil {
-		c.Ui.Error(err.Error())
-		return 1
-	}
-
-	dnsNames, err := parseDNSNames(config.DNSNames)
-	if err != nil {
-		c.Ui.Error(err.Error())
-		return 1
-	}
-
 	outputDir := config.OutputDir
-	outputBaseFileName := "node"
+	outputBaseFileName := "user-" + config.Username
 
 	if len(outputDir) == 0 {
-		outputDir, err = getNodeOutputDirectory()
-		if err != nil {
-			c.Ui.Error(err.Error())
-			return 1
-		}
-		outputBaseFileName = outputDir
+		outputDir = outputBaseFileName
 	}
 
-	// check if certificates already exist
-	keyPath := path.Join(config.OutputDir, fmt.Sprintf("%s.key", outputBaseFileName))
-	crtPath := path.Join(config.OutputDir, fmt.Sprintf("%s.crt", outputBaseFileName))
-
-	if fileExists(keyPath, config.Force) {
+	// check if user certificates already exist
+	if fileExists(path.Join(outputDir, outputBaseFileName+".crt"), config.Force) {
 		c.Ui.Error(ErrFileExists)
 		return 1
 	}
 
-	if fileExists(crtPath, config.Force) {
+	if fileExists(path.Join(outputDir, outputBaseFileName+".key"), config.Force) {
 		c.Ui.Error(ErrFileExists)
 		return 1
 	}
@@ -172,22 +111,22 @@ func (c *CreateNode) Run(args []string) int {
 		years = 0
 	}
 
-	err = generateNodeCertificate(caCert, caKey, ips, dnsNames, years, days, outputDir, outputBaseFileName, config.CommonName, config.Force)
+	err = generateUserCertificate(config.Username, outputBaseFileName, caCert, caKey, years, days, outputDir, config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
 	if isBoringEnabled() {
-		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
+		c.Ui.Output(fmt.Sprintf("A user certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
 	} else {
-		c.Ui.Output(fmt.Sprintf("A node certificate & key file have been generated in the '%s' directory.", outputDir))
+		c.Ui.Output(fmt.Sprintf("A user certificate & key file have been generated in the '%s' directory.", outputDir))
 	}
 
 	return 0
 }
 
-func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, ips []net.IP, dnsNames []string, years int, days int, outputDir string, outputBaseFileName string, commonName string, force bool) error {
+func generateUserCertificate(username string, outputBaseFileName string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, years int, days int, outputDir string, force bool) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -204,16 +143,14 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	cert := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			CommonName: commonName,
+			CommonName: username,
 		},
 		IsCA:                  false,
 		BasicConstraintsValid: true,
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(years, 0, days),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		IPAddresses:           ips,
-		DNSNames:              dnsNames,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		SubjectKeyId:          subjectKeyID,
 		AuthorityKeyId:        authorityKeyID,
 	}
@@ -246,31 +183,27 @@ func generateNodeCertificate(caCert *x509.Certificate, caPrivateKey *rsa.Private
 	return err
 }
 
-func (c *CreateNode) Help() string {
+func (c *CreateUser) Help() string {
 	var buffer bytes.Buffer
 
-	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0) // 2 spaces minimum gap between columns
+	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "Usage: create_node [options]")
+	fmt.Fprintln(w, "Usage: create_user [options]")
 	fmt.Fprintln(w, c.Synopsis())
 	fmt.Fprintln(w, "Options:")
 
+	writeHelpOption(w, "username", "The name of the EventStoreDB user to generate a certificate for.")
 	writeHelpOption(w, "ca-certificate", "The path to the CA certificate file (default: ./ca/ca.crt).")
 	writeHelpOption(w, "ca-key", "The path to the CA key file (default: ./ca/ca.key).")
 	writeHelpOption(w, "days", "The validity period of the certificates in days (default: 1 year).")
-	writeHelpOption(w, "out", "The output directory (default: ./nodeX where X is an auto-generated number).")
-	writeHelpOption(w, "ip-addresses", "Comma-separated list of IP addresses of the node.")
-	writeHelpOption(w, "dns-names", "Comma-separated list of DNS names of the node.")
-	writeHelpOption(w, "common-name", "The certificate subject common name.")
+	writeHelpOption(w, "out", "The output directory (default: ./user-<username>).")
 	writeHelpOption(w, "force", forceOption)
-
-	fmt.Fprintln(w, "\nAt least one IP address or DNS name needs to be specified.")
 
 	w.Flush()
 
 	return strings.TrimSpace(buffer.String())
 }
 
-func (c *CreateNode) Synopsis() string {
-	return "Generate a node/server TLS certificate to be used with EventStoreDB"
+func (c *CreateUser) Synopsis() string {
+	return "Generate a user TLS certificate to be used with EventStoreDB clients"
 }

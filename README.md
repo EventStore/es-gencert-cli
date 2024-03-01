@@ -52,8 +52,14 @@ Generating a certificate authority:
 
 Generating a certificate for an EventStoreDB node:
 
-```
+```bash
 ./es-gencert-cli create-node -ca-certificate ./es-ca/ca.crt -ca-key ./es-ca/ca.key -out ./node1 -ip-addresses 127.0.0.1,172.20.240.1 -dns-names localhost,eventstore-node1.localhost.com
+```
+
+Generating a certification for user authentication:
+
+```bash
+./es-gencert-cli create-user -username ouro -days 10 -ca-certificate ./es-ca/ca.crt -ca-key ./es-ca/ca.key 
 ```
 
 Generating certificates using config file:

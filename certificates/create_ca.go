@@ -40,7 +40,7 @@ func (c *CreateCA) Run(args []string) int {
 	flags.StringVar(&config.OutputDir, "out", "./ca", "The output directory")
 	flags.StringVar(&config.CACertificatePath, "ca-certificate", "", "the path to a CA certificate file")
 	flags.StringVar(&config.CAKeyPath, "ca-key", "", "the path to a CA key file")
-	flags.BoolVar(&config.Force, "force", false, "Force overwrite of existing files without prompting")
+	flags.BoolVar(&config.Force, "force", false, forceOption)
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -184,7 +184,7 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 		return fmt.Errorf("could not encode certificate to PEM format: %s", err.Error())
 	}
 
-	err = writeCACertAndKey(outputDir, "ca", certPem, privateKeyPem, force)
+	err = writeCertAndKey(outputDir, "ca", certPem, privateKeyPem, force)
 
 	return err
 }
@@ -195,7 +195,7 @@ func (c *CreateCA) Help() string {
 	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
 
 	fmt.Fprintln(w, "Usage: create_ca [options]")
-	fmt.Fprintln(w, "Generate a root/intermediate CA TLS certificate to be used with EventStoreDB.")
+	fmt.Fprintln(w, c.Synopsis())
 	fmt.Fprintln(w, "Options:")
 
 	writeHelpOption(w, "days", "The validity period of the certificate in days (default: 5 years).")

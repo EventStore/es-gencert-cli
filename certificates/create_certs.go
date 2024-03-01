@@ -36,7 +36,7 @@ func (c *CreateCertificates) Run(args []string) int {
 	flags := flag.NewFlagSet("create_certs", flag.ContinueOnError)
 	flags.Usage = func() { c.Ui.Info(c.Help()) }
 	flags.StringVar(&arguments.ConfigPath, "config-file", "./certs.yml", "The config yml file")
-	flags.BoolVar(&arguments.Force, "force", false, "Force overwrite of existing files without prompting")
+	flags.BoolVar(&arguments.Force, "force", false, forceOption)
 
 	if err := flags.Parse(args); err != nil {
 		return 1
@@ -162,7 +162,7 @@ func (c *CreateCertificates) Help() string {
 	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
 
 	fmt.Fprintln(w, "Usage: create_certs [options]")
-	fmt.Fprintln(w, "Generate ca and node Certificates from an yml configuration file.")
+	fmt.Fprintln(w, c.Synopsis())
 	fmt.Fprintln(w, "Options:")
 
 	writeHelpOption(w, "config-file", "The path to the yml config file.")
