@@ -37,7 +37,7 @@ func NewCreateCA(ui cli.Ui) *CreateCA {
 	c.Flags = flag.NewFlagSet("create_ca", flag.ContinueOnError)
 	c.Flags.IntVar(&c.Config.Days, "days", 0, DayFlagUsage)
 	c.Flags.StringVar(&c.Config.OutputDir, "out", "./ca", OutDirFlagUsage)
-	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "", CaPathFlagUsage)
+	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "", CaCertFlagUsage)
 	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "", CaKeyFlagUsage)
 	c.Flags.StringVar(&c.Config.Name, "name", "ca", NameFlagUsage)
 	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
@@ -196,6 +196,7 @@ func (c *CreateCA) Help() string {
 	c.Flags.PrintDefaults()
 	return helpText.String()
 }
+
 func (c *CreateCA) Synopsis() string {
 	return "Generate a root/intermediate CA TLS certificate to be used with EventStoreDB"
 }

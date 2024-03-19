@@ -42,7 +42,7 @@ func NewCreateNode(ui cli.Ui) *CreateNode {
 	c := &CreateNode{Ui: ui}
 
 	c.Flags = flag.NewFlagSet("create_node", flag.ContinueOnError)
-	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "./ca/ca.crt", CaPathFlagUsage)
+	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "./ca/ca.crt", CaCertFlagUsage)
 	c.Flags.StringVar(&c.Config.CommonName, "common-name", "eventstoredb-node", "the certificate subject common name")
 	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "./ca/ca.key", CaKeyFlagUsage)
 	c.Flags.StringVar(&c.Config.IPAddresses, "ip-addresses", "", "comma-separated list of IP addresses of the node")

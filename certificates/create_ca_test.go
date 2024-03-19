@@ -24,7 +24,7 @@ func TestCreateCACertificate_NominalCase_ShouldSucceed(t *testing.T) {
 
 	t.Parallel()
 
-	cleanup, tempDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestEnvParams{
+	cleanup, tempDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestCreateCAParams{
 		OutputDir: "./ca",
 	})
 	defer cleanup()
@@ -50,7 +50,7 @@ func TestCreateCACertificate_DifferentOut_ShouldSucceed(t *testing.T) {
 
 	t.Parallel()
 
-	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestEnvParams{})
+	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestCreateCAParams{})
 	defer cleanup()
 
 	args := []string{"-out", filepath.Join(tempCaDir, "my-custom-dir")}
@@ -69,7 +69,7 @@ func TestCreateCACertificate_WithNameFlag_ShouldCreateNamedCertificates(t *testi
 
 	t.Parallel()
 
-	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestEnvParams{})
+	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestCreateCAParams{})
 	defer cleanup()
 
 	args := []string{"-out", tempCaDir, "-name", "my-custom-name"}
@@ -89,7 +89,7 @@ func TestCreateCACertificate_WithForceFlag_ShouldRegenerate(t *testing.T) {
 
 	t.Parallel()
 
-	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestEnvParams{})
+	cleanup, tempCaDir, _, _, createCa := setupCreateCaTestEnvironment(t, &TestCreateCAParams{})
 	defer cleanup()
 
 	// Create a CA certificate
@@ -119,7 +119,7 @@ func TestCreateIntermediateCertificate_WithoutRootCertificate_ShouldFail(t *test
 
 	t.Parallel()
 
-	cleanup, tempCaDir, _, errorBuffer, createCa := setupCreateCaTestEnvironment(t, &TestEnvParams{})
+	cleanup, tempCaDir, _, errorBuffer, createCa := setupCreateCaTestEnvironment(t, &TestCreateCAParams{})
 	defer cleanup()
 
 	args := []string{
@@ -135,11 +135,11 @@ func TestCreateIntermediateCertificate_WithoutRootCertificate_ShouldFail(t *test
 	assert.Equal(t, "error reading file: open unknown: no such file or directory", errors[0])
 }
 
-type TestEnvParams struct {
+type TestCreateCAParams struct {
 	OutputDir string
 }
 
-func setupCreateCaTestEnvironment(t *testing.T, params *TestEnvParams) (cleanupFunc func(), tempDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createCa *CreateCA) {
+func setupCreateCaTestEnvironment(t *testing.T, params *TestCreateCAParams) (cleanupFunc func(), tempDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createCa *CreateCA) {
 	tempDir = params.OutputDir
 
 	if tempDir == "" {

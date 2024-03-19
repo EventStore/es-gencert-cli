@@ -22,6 +22,9 @@ func extractErrors(errorMessage string) []string {
 	multiLinePattern := regexp.MustCompile(`\* (.+)`)
 	multiLineMatches := multiLinePattern.FindAllStringSubmatch(errorMessage, -1)
 
+	ansiCodePattern := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	errorMessage = ansiCodePattern.ReplaceAllString(errorMessage, "")
+
 	if len(multiLineMatches) > 0 {
 		for _, match := range multiLineMatches {
 			if len(match) > 1 {

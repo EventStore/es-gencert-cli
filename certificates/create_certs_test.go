@@ -30,9 +30,7 @@ func TestCreateCertificates_ValidConfigFile_ShouldSucceed(t *testing.T) {
 	certsFileWithName := "certs.yml"
 
 	// Create a certs.yml file
-	createConfigFile(t, tempCertsDir, certsFileWithName, certsFile, tempCertsDir)
-
-	fmt.Println(tempCertsDir, certsFileWithName)
+	createConfigFile(t, tempCertsDir, certsFileWithName, validCertificatesYaml, tempCertsDir)
 
 	args := []string{
 		"-config-file", filepath.Join(tempCertsDir, certsFileWithName),
@@ -64,7 +62,7 @@ func TestCreateCertificates_ExistingCertificatesWithoutForceFlag_ShouldFail(t *t
 	cleanup, tempCertsDir, _, errorBuffer, createCerts := setupCertificateTestEnvironment(t)
 	defer cleanup()
 
-	createConfigFile(t, tempCertsDir, "certs.yml", certsFile, tempCertsDir)
+	createConfigFile(t, tempCertsDir, "certs.yml", validCertificatesYaml, tempCertsDir)
 
 	args := []string{
 		"-config-file", tempCertsDir + "/certs.yml",
@@ -105,7 +103,7 @@ func TestCreateCertificates_ForceFlagWithExistingCertificates_ShouldRegenerate(t
 	certsFileWithName := "certs.yml"
 
 	// Create a certs.yml file
-	createConfigFile(t, tempCertsDir, certsFileWithName, certsFile, tempCertsDir)
+	createConfigFile(t, tempCertsDir, certsFileWithName, validCertificatesYaml, tempCertsDir)
 
 	args := []string{
 		"-config-file", filepath.Join(tempCertsDir, certsFileWithName),
@@ -172,7 +170,7 @@ func TestCreateCertificates_ValidConfigWithCustomNames_ShouldCreateNamedCertific
 
 	certsFileName := "certs-with-name.yml"
 
-	createConfigFile(t, tempCertsDir, certsFileName, certsFileWithName, tempCertsDir)
+	createConfigFile(t, tempCertsDir, certsFileName, certificatesYamlWithOverrideName, tempCertsDir)
 
 	args := []string{
 		"-config-file", filepath.Join(tempCertsDir, certsFileName),
@@ -205,7 +203,7 @@ func TestCreateCertificates_InvalidPathInConfig_ShouldFailWithError(t *testing.T
 
 	certsFileName := "certs.yml"
 
-	createConfigFile(t, tempCertsDir, certsFileName, certsFileWithInvalidPath, tempCertsDir)
+	createConfigFile(t, tempCertsDir, certsFileName, certificatesYamlWithInvalidPath, tempCertsDir)
 
 	args := []string{
 		"-config-file", filepath.Join(tempCertsDir, certsFileName),
@@ -219,7 +217,7 @@ func TestCreateCertificates_InvalidPathInConfig_ShouldFailWithError(t *testing.T
 	assert.Equal(t, 1, len(errors), "Expected 1 error")
 
 	expectedErrorMessage := fmt.Sprintf("error reading file: open %s: no such file or directory", filepath.Join(tempCertsDir, "invalid_root_ca", "ca.crt"))
-	assert.Equal(t, errors[0], expectedErrorMessage)
+	assert.Equal(t, expectedErrorMessage, errors[0])
 
 	// The root CA will be created
 	assert.DirExists(t, filepath.Join(tempCertsDir, "root_ca"))
@@ -230,7 +228,7 @@ func TestCreateCertificates_InvalidPathInConfig_ShouldFailWithError(t *testing.T
 }
 
 // Valid certificate file
-var certsFile = `certificates:
+var validCertificatesYaml = `certificates:
   ca-certs:
     - out: "./root_ca"
     - out: "./intermediate_ca"
@@ -255,7 +253,7 @@ var certsFile = `certificates:
       dns-names: "localhost,eventstore-node2.localhost.com"`
 
 // Invalid path defined at ca-certificate in the config
-var certsFileWithInvalidPath = `certificates:
+var certificatesYamlWithInvalidPath = `certificates:
   ca-certs:
     - out: "./root_ca"
     - out: "./intermediate_ca"
@@ -270,7 +268,7 @@ var certsFileWithInvalidPath = `certificates:
       dns-names: "localhost,eventstore-node1.localhost.com"`
 
 // Each certificate have a name parameter
-var certsFileWithName = `certificates:
+var certificatesYamlWithOverrideName = `certificates:
   ca-certs:
     - out: "./custom_root"
       name: "custom_root"

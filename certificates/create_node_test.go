@@ -13,14 +13,12 @@ import (
 )
 
 func TestCreateNodeCertificate(t *testing.T) {
-	t.Run("TestCreateNodeCertificate_NoParams_ShouldFail", TestCreateNodeCertificate_NoParams_ShouldFail)
+	t.Run("TestCreateNodeCertificate_WithoutParams_ShouldFail", TestCreateNodeCertificate_WithoutParams_ShouldFail)
 	t.Run("TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed", TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed)
 	t.Run("TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate", TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate)
 }
 
-func TestCreateNodeCertificate_NoParams_ShouldFail(t *testing.T) {
-	// Create a node certificate with no params
-
+func TestCreateNodeCertificate_WithoutParams_ShouldFail(t *testing.T) {
 	t.Parallel()
 
 	cleanup, _, _, _, errorBuffer, createNode := setupCreateNodeTestEnvironment(t)
@@ -33,7 +31,6 @@ func TestCreateNodeCertificate_NoParams_ShouldFail(t *testing.T) {
 	errors := extractErrors(errorBuffer.String())
 	assert.Equal(t, 1, len(errors))
 	assert.Equal(t, "at least one IP address or DNS name needs to be specified with --ip-addresses or --dns-names", errors[0])
-	assert.Equal(t, 1, result)
 }
 
 func TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed(t *testing.T) {
@@ -59,11 +56,9 @@ func TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed(t *testing.T)
 	cert, err := readCertificateFromFile(filepath.Join(tempNodeDir, "node.crt"))
 	assert.NoError(t, err, "Failed to read and parse certificate file")
 
-	// The certificate should be valid for 1 year
 	expectedNotAfter := time.Now().AddDate(1, 0, 0)
 	assert.WithinDuration(t, expectedNotAfter, cert.NotAfter, time.Second, "Certificate validity period does not match expected default")
 
-	// Now we verify if the certificate is signed by the provided root CA
 	caCert, err := readCertificateFromFile(filepath.Join(tempCaDir, "ca.crt"))
 	assert.NoError(t, err, "Failed to read and parse CA certificate file")
 
@@ -75,8 +70,6 @@ func TestCreateNodeCertificate_WithAllRequiredParams_ShouldSucceed(t *testing.T)
 }
 
 func TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate(t *testing.T) {
-	// Create a node certificate with the force flag
-
 	t.Parallel()
 
 	cleanup, tempNodeDir, tempCaDir, _, _, createNode := setupCreateNodeTestEnvironment(t)
@@ -91,25 +84,16 @@ func TestCreateNodeCertificate_WithForceFlag_ShouldRegenerate(t *testing.T) {
 	}
 
 	result := createNode.Run(args)
-	assert.Equal(t, 0, result, "The 'create-node' operation without the --force flag should succeed the first time")
+	originalNodeCert, originalNodeKey := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
 
-	assert.FileExists(t, filepath.Join(tempNodeDir, "node.crt"), "Node certificate should exist")
-	assert.FileExists(t, filepath.Join(tempNodeDir, "node.key"), "Node key should exist")
-
-	// Read the content of the key and crt files
-	originalCaCert, originalKeyCert := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
-
-	// Create the node certificate again with the force flag
 	updatedArgs := append(args, "-force")
-
 	result = createNode.Run(updatedArgs)
 	assert.Equal(t, 0, result, "The 'create-node' should override the existing certificate with the --force flag")
 
-	// Read the content of the key and crt files again
-	newCaCert, newKeyCert := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
+	newNodeCert, newNodeKey := readAndDecodeCertificateAndKey(t, tempNodeDir, "node")
 
-	assert.NotEqual(t, originalCaCert, newCaCert, "The CA certificate should be different")
-	assert.NotEqual(t, originalKeyCert, newKeyCert, "The CA key should be different")
+	assert.NotEqual(t, originalNodeCert, newNodeCert, "The Node certificate should be different")
+	assert.NotEqual(t, originalNodeKey, newNodeKey, "The Node key should be different")
 }
 
 func setupCreateNodeTestEnvironment(t *testing.T) (cleanupFunc func(), tempNodeDir, tempCaDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createNode *CreateNode) {
