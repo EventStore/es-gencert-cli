@@ -32,7 +32,7 @@ func TestCreateCACertificate_NominalCase_ShouldSucceed(t *testing.T) {
 	var args []string
 
 	result := createCa.Run(args)
-	assert.Equal(t, 0, result, "creat-ca should pass without any additional parameters")
+	assert.Equal(t, 0, result, "create-ca should pass without any additional parameters")
 
 	assert.FileExists(t, filepath.Join("./ca", "ca.crt"), "CA certificate should exist")
 	assert.FileExists(t, filepath.Join("./ca", "ca.key"), "CA key should exist")
@@ -41,7 +41,8 @@ func TestCreateCACertificate_NominalCase_ShouldSucceed(t *testing.T) {
 	assert.NoError(t, err, "Failed to read and parse certificate file")
 
 	// The certificate should be valid for 5 year
-	expectedNotAfter := time.Now().AddDate(5, 0, 0)
+	now := time.Now().Truncate(time.Second)
+	expectedNotAfter := now.AddDate(5, 0, 0)
 	assert.WithinDuration(t, expectedNotAfter, cert.NotAfter, time.Second, "Certificate validity period does not match expected default")
 }
 
@@ -128,11 +129,11 @@ func TestCreateIntermediateCertificate_WithoutRootCertificate_ShouldFail(t *test
 		"-ca-key", "unknown",
 	}
 	result := createCa.Run(args)
-	assert.Equal(t, 1, result, "creat-ca should fail without a root certificate")
+	assert.Equal(t, 1, result, "create-ca should fail without a root certificate")
 
 	errors := extractErrors(errorBuffer.String())
 	assert.Equal(t, 1, len(errors), "Expected 1 error")
-	assert.Equal(t, "error reading file: open unknown: no such file or directory", errors[0])
+	assert.Contains(t, errors[0], "error reading file")
 }
 
 type TestCreateCAParams struct {

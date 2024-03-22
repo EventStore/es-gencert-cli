@@ -151,6 +151,9 @@ func (c *CreateNode) Run(args []string) int {
 			c.Ui.Error(err.Error())
 			return 1
 		}
+	}
+
+	if len(outputBaseFileName) == 0 {
 		outputBaseFileName = outputDir
 	}
 

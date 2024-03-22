@@ -51,8 +51,8 @@ func writeFileWithDir(filePath string, data []byte, perm os.FileMode) error {
 }
 
 func writeCertAndKey(outputDir string, fileName string, certPem, privateKeyPem *bytes.Buffer, force bool) error {
-	certFile := filepath.Join(outputDir, fileName+".crt")
-	keyFile := filepath.Join(outputDir, fileName+".key")
+	certFile := filepath.ToSlash(fmt.Sprintf("%s/%s.crt", outputDir, fileName))
+	keyFile := filepath.ToSlash(fmt.Sprintf("%s/%s.key", outputDir, fileName))
 
 	if force {
 		if _, err := os.Stat(certFile); err == nil {

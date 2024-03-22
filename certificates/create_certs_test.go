@@ -216,8 +216,8 @@ func TestCreateCertificates_InvalidPathInConfig_ShouldFailWithError(t *testing.T
 
 	assert.Equal(t, 1, len(errors), "Expected 1 error")
 
-	expectedErrorMessage := fmt.Sprintf("error reading file: open %s: no such file or directory", filepath.Join(tempCertsDir, "invalid_root_ca", "ca.crt"))
-	assert.Equal(t, expectedErrorMessage, errors[0])
+	assert.Contains(t, errors[0], "error reading file")
+	assert.Contains(t, errors[0], filepath.ToSlash(fmt.Sprintf("%s/invalid_root_ca/ca.crt", tempCertsDir)))
 
 	// The root CA will be created
 	assert.DirExists(t, filepath.Join(tempCertsDir, "root_ca"))
@@ -321,7 +321,7 @@ func setupCertificateTestEnvironment(t *testing.T) (cleanupFunc func(), tempCert
 }
 
 func createConfigFile(t *testing.T, dirPath string, fileName string, content string, newParentDir string) {
-	updatedContent := strings.ReplaceAll(content, "./", fmt.Sprintf("%s/", newParentDir))
+	updatedContent := strings.ReplaceAll(content, "./", fmt.Sprintf("%s/", filepath.ToSlash(newParentDir)))
 
 	filePath := filepath.Join(dirPath, fileName)
 
