@@ -29,7 +29,10 @@ func main() {
 	flags := flag.NewFlagSet("config", flag.ContinueOnError)
 
 	if !c.IsVersion() && !c.IsHelp() {
-		flags.Parse(os.Args[1:])
+		err := flags.Parse(os.Args[1:])
+		if err != nil {
+			ui.Error(err.Error())
+		}
 		args = flags.Args()
 	}
 
@@ -38,36 +41,32 @@ func main() {
 
 	c.Commands = map[string]cli.CommandFactory{
 		"create-ca": func() (cli.Command, error) {
-			return &certificates.CreateCA{
-				Ui: &cli.ColoredUi{
-					Ui:          ui,
-					OutputColor: cli.UiColorBlue,
-				},
-			}, nil
+			return certificates.NewCreateCA(&cli.ColoredUi{
+				Ui:          ui,
+				OutputColor: cli.UiColorBlue,
+			}), nil
 		},
 		"create-node": func() (cli.Command, error) {
-			return &certificates.CreateNode{
-				Ui: &cli.ColoredUi{
+			return certificates.NewCreateNode(
+				&cli.ColoredUi{
 					Ui:          ui,
 					OutputColor: cli.UiColorBlue,
 				},
-			}, nil
+			), nil
 		},
 		"create-certs": func() (cli.Command, error) {
-			return &certificates.CreateCertificates{
-				Ui: &cli.ColoredUi{
-					Ui:          ui,
-					OutputColor: cli.UiColorBlue,
-				},
-			}, nil
+			return certificates.NewCreateCerts(&cli.ColoredUi{
+				Ui:          ui,
+				OutputColor: cli.UiColorBlue,
+			},
+			), nil
 		},
 		"create-user": func() (cli.Command, error) {
-			return &certificates.CreateUser{
-				Ui: &cli.ColoredUi{
-					Ui:          ui,
-					OutputColor: cli.UiColorBlue,
-				},
-			}, nil
+			return certificates.NewCreateUser(&cli.ColoredUi{
+				Ui:          ui,
+				OutputColor: cli.UiColorBlue,
+			},
+			), nil
 		},
 	}
 	c.HelpFunc = createGeneralHelpFunc(appName, flags)

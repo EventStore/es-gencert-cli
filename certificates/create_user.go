@@ -10,9 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"path"
-	"strings"
-	"text/tabwriter"
+	"path/filepath"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -20,7 +18,9 @@ import (
 )
 
 type CreateUser struct {
-	Ui cli.Ui
+	Ui     cli.Ui
+	Config CreateUserArguments
+	Flags  *flag.FlagSet
 }
 
 type CreateUserArguments struct {
@@ -29,41 +29,48 @@ type CreateUserArguments struct {
 	CAKeyPath         string `yaml:"ca-key"`
 	Days              int    `yaml:"days"`
 	OutputDir         string `yaml:"out"`
+	Name              string `yaml:"name"`
 	Force             bool   `yaml:"force"`
 }
 
+func NewCreateUser(ui cli.Ui) *CreateUser {
+	c := &CreateUser{Ui: ui}
+
+	c.Flags = flag.NewFlagSet("create_user", flag.ContinueOnError)
+	c.Flags.Usage = func() { c.Ui.Info(c.Help()) }
+	c.Flags.StringVar(&c.Config.Username, "username", "", "the EventStoreDB user")
+	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "./ca/ca.crt", CaCertFlagUsage)
+	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "./ca/ca.key", CaKeyFlagUsage)
+	c.Flags.IntVar(&c.Config.Days, "days", 0, DayFlagUsage)
+	c.Flags.StringVar(&c.Config.OutputDir, "out", "", OutDirFlagUsage)
+	c.Flags.StringVar(&c.Config.Name, "name", "", NameFlagUsage)
+	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
+
+	return c
+}
+
 func (c *CreateUser) Run(args []string) int {
-	var config CreateUserArguments
-
-	flags := flag.NewFlagSet("create_user", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
-	flags.StringVar(&config.Username, "username", "", "the EventStoreDB user")
-	flags.StringVar(&config.CACertificatePath, "ca-certificate", "./ca/ca.crt", "the path to the CA certificate file")
-	flags.StringVar(&config.CAKeyPath, "ca-key", "./ca/ca.key", "the path to the CA key file")
-	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
-	flags.StringVar(&config.OutputDir, "out", "", "The output directory")
-	flags.BoolVar(&config.Force, "force", false, forceOption)
-
-	if err := flags.Parse(args); err != nil {
+	if err := c.Flags.Parse(args); err != nil {
+		c.Ui.Error(err.Error())
 		return 1
 	}
 
 	validationErrors := new(multierror.Error)
 
-	if len(config.Username) == 0 {
-		multierror.Append(validationErrors, errors.New("username is a required field"))
+	if len(c.Config.Username) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("username is a required field"))
 	}
 
-	if len(config.CACertificatePath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
+	if len(c.Config.CACertificatePath) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("ca-certificate is a required field"))
 	}
 
-	if len(config.CAKeyPath) == 0 {
-		multierror.Append(validationErrors, errors.New("ca-key is a required field"))
+	if len(c.Config.CAKeyPath) == 0 {
+		_ = multierror.Append(validationErrors, errors.New("ca-key is a required field"))
 	}
 
-	if config.Days < 0 {
-		multierror.Append(validationErrors, errors.New("days must be positive"))
+	if c.Config.Days < 0 {
+		_ = multierror.Append(validationErrors, errors.New("days must be positive"))
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
@@ -71,34 +78,32 @@ func (c *CreateUser) Run(args []string) int {
 		return 1
 	}
 
-	caCert, err := readCertificateFromFile(config.CACertificatePath)
+	caCert, err := readCertificateFromFile(c.Config.CACertificatePath)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	caKey, err := readRSAKeyFromFile(config.CAKeyPath)
+	caKey, err := readRSAKeyFromFile(c.Config.CAKeyPath)
 	if err != nil {
 		err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
-	outputDir := config.OutputDir
-	outputBaseFileName := "user-" + config.Username
-
-	if len(outputDir) == 0 {
-		outputDir = outputBaseFileName
+	outputDir := c.Config.OutputDir
+	outputBaseFileName := c.Config.Name
+	if outputBaseFileName == "" {
+		outputBaseFileName = "user-" + c.Config.Username
 	}
 
-	// check if user certificates already exist
-	if fileExists(path.Join(outputDir, outputBaseFileName+".crt"), config.Force) {
-		c.Ui.Error(ErrFileExists)
-		return 1
+	if outputDir == "" {
+		outputDir = filepath.Dir(outputBaseFileName)
 	}
 
-	if fileExists(path.Join(outputDir, outputBaseFileName+".key"), config.Force) {
-		c.Ui.Error(ErrFileExists)
+	certErr := checkCertificatesLocationWithForce(outputDir, outputBaseFileName, c.Config.Force)
+	if certErr != nil {
+		c.Ui.Error(certErr.Error())
 		return 1
 	}
 
@@ -106,12 +111,12 @@ func (c *CreateUser) Run(args []string) int {
 	years := 1
 	days := 0
 
-	if config.Days != 0 {
-		days = config.Days
+	if c.Config.Days != 0 {
+		days = c.Config.Days
 		years = 0
 	}
 
-	err = generateUserCertificate(config.Username, outputBaseFileName, caCert, caKey, years, days, outputDir, config.Force)
+	err = generateUserCertificate(c.Config.Username, outputBaseFileName, caCert, caKey, years, days, outputDir, c.Config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -156,7 +161,7 @@ func generateUserCertificate(username string, outputBaseFileName string, caCert 
 	}
 
 	privateKeyPem := new(bytes.Buffer)
-	pem.Encode(privateKeyPem, &pem.Block{
+	err = pem.Encode(privateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
@@ -184,24 +189,10 @@ func generateUserCertificate(username string, outputBaseFileName string, caCert 
 }
 
 func (c *CreateUser) Help() string {
-	var buffer bytes.Buffer
-
-	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(w, "Usage: create_user [options]")
-	fmt.Fprintln(w, c.Synopsis())
-	fmt.Fprintln(w, "Options:")
-
-	writeHelpOption(w, "username", "The name of the EventStoreDB user to generate a certificate for.")
-	writeHelpOption(w, "ca-certificate", "The path to the CA certificate file (default: ./ca/ca.crt).")
-	writeHelpOption(w, "ca-key", "The path to the CA key file (default: ./ca/ca.key).")
-	writeHelpOption(w, "days", "The validity period of the certificates in days (default: 1 year).")
-	writeHelpOption(w, "out", "The output directory (default: ./user-<username>).")
-	writeHelpOption(w, "force", forceOption)
-
-	w.Flush()
-
-	return strings.TrimSpace(buffer.String())
+	var helpText bytes.Buffer
+	c.Flags.SetOutput(&helpText)
+	c.Flags.PrintDefaults()
+	return helpText.String()
 }
 
 func (c *CreateUser) Synopsis() string {

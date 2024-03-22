@@ -30,3 +30,5 @@ ca/
 es-gencert-cli
 certs.yml
 .DS_Store
+*.crt
+*.key

@@ -10,9 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"path"
-	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -20,7 +17,9 @@ import (
 )
 
 type CreateCA struct {
-	Ui cli.Ui
+	Ui     cli.Ui
+	Config CreateCAArguments
+	Flags  *flag.FlagSet
 }
 
 type CreateCAArguments struct {
@@ -28,33 +27,38 @@ type CreateCAArguments struct {
 	OutputDir         string `yaml:"out"`
 	CACertificatePath string `yaml:"ca-certificate"`
 	CAKeyPath         string `yaml:"ca-key"`
+	Name              string `yaml:"name"`
 	Force             bool   `yaml:"force"`
 }
 
+func NewCreateCA(ui cli.Ui) *CreateCA {
+	c := &CreateCA{Ui: ui}
+
+	c.Flags = flag.NewFlagSet("create_ca", flag.ContinueOnError)
+	c.Flags.IntVar(&c.Config.Days, "days", 0, DayFlagUsage)
+	c.Flags.StringVar(&c.Config.OutputDir, "out", "./ca", OutDirFlagUsage)
+	c.Flags.StringVar(&c.Config.CACertificatePath, "ca-certificate", "", CaCertFlagUsage)
+	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "", CaKeyFlagUsage)
+	c.Flags.StringVar(&c.Config.Name, "name", "ca", NameFlagUsage)
+	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
+	return c
+}
+
 func (c *CreateCA) Run(args []string) int {
-	var config CreateCAArguments
-
-	flags := flag.NewFlagSet("create_ca", flag.ContinueOnError)
-	flags.Usage = func() { c.Ui.Info(c.Help()) }
-	flags.IntVar(&config.Days, "days", 0, "the validity period of the certificate in days")
-	flags.StringVar(&config.OutputDir, "out", "./ca", "The output directory")
-	flags.StringVar(&config.CACertificatePath, "ca-certificate", "", "the path to a CA certificate file")
-	flags.StringVar(&config.CAKeyPath, "ca-key", "", "the path to a CA key file")
-	flags.BoolVar(&config.Force, "force", false, forceOption)
-
-	if err := flags.Parse(args); err != nil {
+	if err := c.Flags.Parse(args); err != nil {
+		c.Ui.Error(err.Error())
 		return 1
 	}
 
 	validationErrors := new(multierror.Error)
-	if config.Days < 0 {
-		multierror.Append(validationErrors, errors.New("days must be positive"))
+	if c.Config.Days < 0 {
+		_ = multierror.Append(validationErrors, errors.New("days must be positive"))
 	}
 
-	caCertPathLen := len(config.CACertificatePath)
-	caKeyPathLen := len(config.CAKeyPath)
+	caCertPathLen := len(c.Config.CACertificatePath)
+	caKeyPathLen := len(c.Config.CAKeyPath)
 	if (caCertPathLen > 0 && caKeyPathLen == 0) || (caKeyPathLen > 0 && caCertPathLen == 0) {
-		multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
+		_ = multierror.Append(validationErrors, errors.New("both -ca-certificate and -ca-key options are required"))
 	}
 
 	if validationErrors.ErrorOrNil() != nil {
@@ -62,14 +66,9 @@ func (c *CreateCA) Run(args []string) int {
 		return 1
 	}
 
-	// check if certificates already exist
-	if fileExists(path.Join(config.OutputDir, "ca.key"), config.Force) {
-		c.Ui.Error(ErrFileExists)
-		return 1
-	}
-
-	if fileExists(path.Join(config.OutputDir, "ca.crt"), config.Force) {
-		c.Ui.Error(ErrFileExists)
+	certErr := checkCertificatesLocationWithForce(c.Config.OutputDir, c.Config.Name, c.Config.Force)
+	if certErr != nil {
+		c.Ui.Error(certErr.Error())
 		return 1
 	}
 
@@ -77,8 +76,8 @@ func (c *CreateCA) Run(args []string) int {
 	years := 5
 	days := 0
 
-	if config.Days != 0 {
-		days = config.Days
+	if c.Config.Days != 0 {
+		days = c.Config.Days
 		years = 0
 	}
 
@@ -86,13 +85,13 @@ func (c *CreateCA) Run(args []string) int {
 	var caKey *rsa.PrivateKey
 	var err error
 	if caCertPathLen > 0 {
-		caCert, err = readCertificateFromFile(config.CACertificatePath)
+		caCert, err = readCertificateFromFile(c.Config.CACertificatePath)
 		if err != nil {
 			c.Ui.Error(err.Error())
 			return 1
 		}
 
-		caKey, err = readRSAKeyFromFile(config.CAKeyPath)
+		caKey, err = readRSAKeyFromFile(c.Config.CAKeyPath)
 		if err != nil {
 			err := fmt.Errorf("error: %s. please note that only RSA keys are currently supported", err.Error())
 			c.Ui.Error(err.Error())
@@ -100,10 +99,11 @@ func (c *CreateCA) Run(args []string) int {
 		}
 	}
 
-	outputDir := config.OutputDir
-	err = generateCACertificate(years, days, outputDir, caCert, caKey, config.Force)
+	outputDir := c.Config.OutputDir
+	err = generateCACertificate(years, days, outputDir, c.Config.Name, caCert, caKey, c.Config.Force)
 	if err != nil {
 		c.Ui.Error(err.Error())
+		return 1
 	} else {
 		if isBoringEnabled() {
 			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory (FIPS mode enabled).", outputDir))
@@ -111,10 +111,11 @@ func (c *CreateCA) Run(args []string) int {
 			c.Ui.Output(fmt.Sprintf("A CA certificate & key file have been generated in the '%s' directory.", outputDir))
 		}
 	}
+
 	return 0
 }
 
-func generateCACertificate(years int, days int, outputDir string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, force bool) error {
+func generateCACertificate(years int, days int, outputDir string, name string, caCert *x509.Certificate, caPrivateKey *rsa.PrivateKey, force bool) error {
 	serialNumber, err := generateSerialNumber(128)
 	if err != nil {
 		return fmt.Errorf("could not generate 128-bit serial number: %s", err.Error())
@@ -184,29 +185,16 @@ func generateCACertificate(years int, days int, outputDir string, caCert *x509.C
 		return fmt.Errorf("could not encode certificate to PEM format: %s", err.Error())
 	}
 
-	err = writeCertAndKey(outputDir, "ca", certPem, privateKeyPem, force)
+	err = writeCertAndKey(outputDir, name, certPem, privateKeyPem, force)
 
 	return err
 }
 
 func (c *CreateCA) Help() string {
-	var buffer bytes.Buffer
-
-	w := tabwriter.NewWriter(&buffer, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(w, "Usage: create_ca [options]")
-	fmt.Fprintln(w, c.Synopsis())
-	fmt.Fprintln(w, "Options:")
-
-	writeHelpOption(w, "days", "The validity period of the certificate in days (default: 5 years).")
-	writeHelpOption(w, "out", "The output directory (default: ./ca).")
-	writeHelpOption(w, "ca-certificate", "The path to a CA certificate file for creating an intermediate CA certificate.")
-	writeHelpOption(w, "ca-key", "The path to a CA key file for creating an intermediate CA certificate.")
-	writeHelpOption(w, "force", forceOption)
-
-	w.Flush()
-
-	return strings.TrimSpace(buffer.String())
+	var helpText bytes.Buffer
+	c.Flags.SetOutput(&helpText)
+	c.Flags.PrintDefaults()
+	return helpText.String()
 }
 
 func (c *CreateCA) Synopsis() string {
