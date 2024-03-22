@@ -27,6 +27,7 @@ type Config struct {
 	Certificates struct {
 		CaCerts []CreateCAArguments   `yaml:"ca-certs"`
 		Nodes   []CreateNodeArguments `yaml:"node-certs"`
+		Users   []CreateUserArguments `yaml:"user-certs"`
 	} `yaml:"certificates"`
 }
 
@@ -63,7 +64,7 @@ func (c *CreateCertificates) Run(args []string) int {
 		return 1
 	}
 
-	if c.generateCaCerts(config, c.Config.Force) != 0 || c.generateNodes(config, c.Config.Force) != 0 {
+	if c.generateCaCerts(config, c.Config.Force) != 0 || c.generateNodes(config, c.Config.Force) != 0 || c.generateUsers(config, c.Config.Force) != 0 {
 		return 1
 	}
 
@@ -99,6 +100,21 @@ func (c *CreateCertificates) checkPaths(config Config, force bool) error {
 	wg.Wait()
 	return certError
 }
+
+func (c *CreateCertificates) generateUsers(config Config, force bool) int {
+	for _, user := range config.Certificates.Users {
+		user.Force = force
+		createUser := NewCreateUser(&cli.ColoredUi{
+			Ui:          c.Ui,
+			OutputColor: cli.UiColorBlue,
+		})
+		if createUser.Run(toArguments(user)) != 0 {
+			return 1
+		}
+	}
+	return 0
+}
+
 func (c *CreateCertificates) generateNodes(config Config, force bool) int {
 	for _, node := range config.Certificates.Nodes {
 		node.Force = force

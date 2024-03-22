@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -28,6 +29,7 @@ type CreateUserArguments struct {
 	CAKeyPath         string `yaml:"ca-key"`
 	Days              int    `yaml:"days"`
 	OutputDir         string `yaml:"out"`
+	Name              string `yaml:"name"`
 	Force             bool   `yaml:"force"`
 }
 
@@ -41,6 +43,7 @@ func NewCreateUser(ui cli.Ui) *CreateUser {
 	c.Flags.StringVar(&c.Config.CAKeyPath, "ca-key", "./ca/ca.key", CaKeyFlagUsage)
 	c.Flags.IntVar(&c.Config.Days, "days", 0, DayFlagUsage)
 	c.Flags.StringVar(&c.Config.OutputDir, "out", "", OutDirFlagUsage)
+	c.Flags.StringVar(&c.Config.Name, "name", "", NameFlagUsage)
 	c.Flags.BoolVar(&c.Config.Force, "force", false, ForceFlagUsage)
 
 	return c
@@ -89,10 +92,13 @@ func (c *CreateUser) Run(args []string) int {
 	}
 
 	outputDir := c.Config.OutputDir
-	outputBaseFileName := "user-" + c.Config.Username
+	outputBaseFileName := c.Config.Name
+	if outputBaseFileName == "" {
+		outputBaseFileName = "user-" + c.Config.Username
+	}
 
-	if len(outputDir) == 0 {
-		outputDir = outputBaseFileName
+	if outputDir == "" {
+		outputDir = filepath.Dir(outputBaseFileName)
 	}
 
 	certErr := checkCertificatesLocationWithForce(outputDir, outputBaseFileName, c.Config.Force)

@@ -21,3 +21,8 @@ certificates:
       ca-key: "./intermediate_ca/ca.key"
       ip-addresses: "127.0.0.3,172.20.240.3"
       dns-names: "localhost,eventstore-node2.localhost.com"
+  user-certs:
+    - out: "./user-admin"
+      username: "admin"
+      ca-certificate: "./root_ca/ca.crt"
+      ca-key: "./root_ca/ca.key"

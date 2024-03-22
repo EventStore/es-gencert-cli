@@ -17,6 +17,7 @@ func TestCreateUserCertificate(t *testing.T) {
 	t.Run("TestCreateUserCertificate_WithAllRequiredParams_ShouldSucceed", TestCreateUserCertificate_WithAllRequiredParams_ShouldSucceed)
 	t.Run("TestCreateUserCertificate_WithNegativeDays_ShouldFail", TestCreateUserCertificate_WithNegativeDays_ShouldFail)
 	t.Run("TestCreateUserCertificate_WithForceFlag_ShouldRegenerate", TestCreateUserCertificate_WithForceFlag_ShouldRegenerate)
+	t.Run("TestCreateUserCertificate_WithNameFlag_ShouldSucceed", TestCreateUserCertificate_WithNameFlag_ShouldSucceed)
 }
 
 func TestCreateUserCertificate_WithoutParams_ShouldFail(t *testing.T) {
@@ -74,6 +75,7 @@ func TestCreateUserCertificate_WithAllRequiredParams_ShouldSucceed(t *testing.T)
 
 	_, err = cert.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
 	assert.NoError(t, err, "User certificate should be signed by the provided root CA")
+	assert.Equal(t, username, cert.Subject.CommonName, "The common name of the certificate should be the same as the provided username")
 }
 
 func TestCreateUserCertificate_WithNegativeDays_ShouldFail(t *testing.T) {
@@ -124,6 +126,35 @@ func TestCreateUserCertificate_WithForceFlag_ShouldRegenerate(t *testing.T) {
 
 	assert.NotEqual(t, originalUserCert, newUserCert, "The User certificate should be different")
 	assert.NotEqual(t, originalUserKey, newUserKey, "The User key should be different")
+}
+
+func TestCreateUserCertificate_WithNameFlag_ShouldSucceed(t *testing.T) {
+	t.Parallel()
+
+	cleanup, tempUserDir, tempCaDir, _, _, createUser := setupCreateUserTestEnvironment(t)
+	defer cleanup()
+
+	username := "ouro"
+	name := "testing"
+	args := []string{
+		"-username", username,
+		"-name", name,
+		"-ca-certificate", filepath.Join(tempCaDir, "ca.crt"),
+		"-ca-key", filepath.Join(tempCaDir, "ca.key"),
+		"-out", tempUserDir,
+	}
+
+	result := createUser.Run(args)
+
+	assert.Equal(t, 0, result, "The 'create-user' create the certificates with the provided name")
+
+	assert.FileExists(t, filepath.Join(tempUserDir, name+".crt"), "User certificate should exist")
+	assert.FileExists(t, filepath.Join(tempUserDir, name+".key"), "User key should exist")
+
+	cert, err := readCertificateFromFile(filepath.Join(tempUserDir, name+".crt"))
+	assert.NoError(t, err, "Failed to read and parse certificate file")
+
+	assert.Equal(t, username, cert.Subject.CommonName, "The common name of the certificate should be the same as the provided username")
 }
 
 func setupCreateUserTestEnvironment(t *testing.T) (cleanupFunc func(), tempUserDir string, tempCaDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createUser *CreateUser) {

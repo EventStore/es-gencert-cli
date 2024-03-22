@@ -49,6 +49,9 @@ func TestCreateCertificates_ValidConfigFile_ShouldSucceed(t *testing.T) {
 		assert.FileExists(t, filepath.Join(tempCertsDir, node, "node.crt"), fmt.Sprintf("%s certificate should exist", node))
 		assert.FileExists(t, filepath.Join(tempCertsDir, node, "node.key"), fmt.Sprintf("%s certificate key should exist", node))
 	}
+
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.crt"), "User admin certificate should exist")
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.key"), "User admin private key should exist")
 }
 
 func TestCreateCertificates_ExistingCertificatesWithoutForceFlag_ShouldFail(t *testing.T) {
@@ -81,6 +84,9 @@ func TestCreateCertificates_ExistingCertificatesWithoutForceFlag_ShouldFail(t *t
 		assert.FileExists(t, filepath.Join(tempCertsDir, node, "node.crt"), fmt.Sprintf("%s certificate should exist", node))
 		assert.FileExists(t, filepath.Join(tempCertsDir, node, "node.key"), fmt.Sprintf("%s certificate key should exist", node))
 	}
+
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.crt"), "User admin certificate should exist")
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.key"), "User admin private key should exist")
 
 	// Try to generate the certificates again and expect and error
 	result = createCerts.Run(args)
@@ -123,9 +129,13 @@ func TestCreateCertificates_ForceFlagWithExistingCertificates_ShouldRegenerate(t
 		assert.FileExists(t, filepath.Join(tempCertsDir, node, "node.key"), fmt.Sprintf("%s certificate key should exist", node))
 	}
 
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.crt"), "User admin certificate should exist")
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "user-admin.key"), "User admin private key should exist")
+
 	// Read the content of the key and crt files generated from the config file
 	originalCaCert, originalKeyCert := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "root_ca"), "ca")
 	originalIntermediateCaCert, originalIntermediateKeyCert := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "intermediate_ca"), "ca")
+	originalUserCert, originalUserCertKey := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "user-admin"), "user-admin")
 
 	originalCerts := make(map[string][2]interface{})
 
@@ -145,12 +155,16 @@ func TestCreateCertificates_ForceFlagWithExistingCertificates_ShouldRegenerate(t
 
 	newRootCaCert, newRootCaKey := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "root_ca"), "ca")
 	newIntermediateCaCert, newIntermediateKeyCert := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "intermediate_ca"), "ca")
+	newUserCert, newUserCertKey := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, "user-admin"), "user-admin")
 
 	assert.NotEqual(t, originalCaCert, newRootCaCert, "Root CA certificate should be regenerated")
 	assert.NotEqual(t, originalKeyCert, newRootCaKey, "Root CA key should be regenerated")
 
 	assert.NotEqual(t, originalIntermediateCaCert, newIntermediateCaCert, "Intermediate CA certificate should be regenerated")
 	assert.NotEqual(t, originalIntermediateKeyCert, newIntermediateKeyCert, "Intermediate CA key should be regenerated")
+
+	assert.NotEqual(t, originalUserCert, newUserCert, "User certificate should be regenerated")
+	assert.NotEqual(t, originalUserCertKey, newUserCertKey, "User certificate key should be regenerated")
 
 	for _, node := range nodes {
 		newCAHash, newKeyHash := readAndDecodeCertificateAndKey(t, filepath.Join(tempCertsDir, node), "node")
@@ -183,6 +197,8 @@ func TestCreateCertificates_ValidConfigWithCustomNames_ShouldCreateNamedCertific
 	assert.FileExists(t, filepath.Join(tempCertsDir, "custom_root", "custom_root.key"), "Root CA key should exist")
 	assert.FileExists(t, filepath.Join(tempCertsDir, "custom_intermediate", "custom_intermediate.crt"), "Intermediate certificate should exist")
 	assert.FileExists(t, filepath.Join(tempCertsDir, "custom_intermediate", "custom_intermediate.key"), "Intermediate certificate key should exist")
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "renamed.crt"), "User admin certificate should exist")
+	assert.FileExists(t, filepath.Join(tempCertsDir, "user-admin", "renamed.key"), "Intermediate certificate key should exist")
 
 	nodes := []string{"custom_node1", "custom_node2", "custom_node3"}
 	for _, node := range nodes {
@@ -250,7 +266,12 @@ var validCertificatesYaml = `certificates:
       ca-certificate: "./intermediate_ca/ca.crt"
       ca-key: "./intermediate_ca/ca.key"
       ip-addresses: "127.0.0.3,172.20.240.3"
-      dns-names: "localhost,eventstore-node2.localhost.com"`
+      dns-names: "localhost,eventstore-node2.localhost.com"
+  user-certs:
+    - out: "./user-admin"
+      username: "admin"
+      ca-certificate: "./root_ca/ca.crt"
+      ca-key: "./root_ca/ca.key"`
 
 // Invalid path defined at ca-certificate in the config
 var certificatesYamlWithInvalidPath = `certificates:
@@ -295,7 +316,13 @@ var certificatesYamlWithOverrideName = `certificates:
       ca-certificate: "./custom_intermediate/custom_intermediate.crt"
       ca-key: "./custom_intermediate/custom_intermediate.key"
       ip-addresses: "127.0.0.3,172.20.240.3"
-      dns-names: "localhost,eventstore-node2.localhost.com"`
+      dns-names: "localhost,eventstore-node2.localhost.com"
+  user-certs:
+    - out: "./user-admin"
+      username: "admin"
+      name: "renamed"
+      ca-certificate: "./custom_root/custom_root.crt"
+      ca-key: "./custom_root/custom_root.key"`
 
 func setupCertificateTestEnvironment(t *testing.T) (cleanupFunc func(), tempCertsDir string, outputBuffer *bytes.Buffer, errorBuffer *bytes.Buffer, createCerts *CreateCertificates) {
 	tempCertsDir, err := os.MkdirTemp(os.TempDir(), "certs-*")
